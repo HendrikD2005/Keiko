@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: deps
+      include: scope
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:30"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: ci
+      include: scope
