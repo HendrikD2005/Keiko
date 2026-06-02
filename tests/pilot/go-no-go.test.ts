@@ -25,7 +25,7 @@ describe("Wave 1 Go/No-Go documentation", () => {
 
   it("documents evaluation CLI exit semantics", () => {
     const doc = goNoGoDoc();
-    expect(doc).toContain("### Exit codes");
+    expect(doc).toContain("## Exit Codes");
     expect(doc).toContain("`0`");
     expect(doc).toContain("`1`");
     expect(doc).toContain("`2`");

@@ -1,5 +1,5 @@
-// Regression guard for Issue #12 docs drift.
-// Keeps the package-surface chain and the evidence-persistence wording aligned with the real repo.
+// Regression guard for release docs drift.
+// Keeps the shipped end-user docs aligned with the executable package surface.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -22,20 +22,15 @@ const PACKAGE_SURFACE_CHAIN = [
 ].join(" && ");
 
 describe("Issue #12 docs drift", () => {
-  it("keeps the package-surface chain exact in package.json and packaging docs", () => {
+  it("keeps the package-surface chain exact without exposing release engineering docs", () => {
     const pkg = readPackageJson();
     const readme = readText("README.md");
-    const packaging = readText("docs/npm-packaging.md");
 
     expect(pkg.scripts.prepack).toBe(PACKAGE_SURFACE_CHAIN);
     expect(pkg.scripts.prepublishOnly).toBe(PACKAGE_SURFACE_CHAIN);
-    expect(readme).toContain(
-      "See [npm packaging](https://github.com/oscharko-dev/Keiko/blob/dev/docs/npm-packaging.md) for the exact prepack chain and surface check.",
-    );
-    expect(packaging).toContain("npm run ui:ci");
-    expect(packaging).toContain("npm run prepack");
-    expect(packaging).toContain(PACKAGE_SURFACE_CHAIN);
-    expect(packaging).not.toContain("prepack does not perform a hidden nested install");
+    expect(existsSync(resolve(process.cwd(), "docs", "npm-packaging.md"))).toBe(false);
+    expect(readme).not.toContain("npm packaging");
+    expect(readme).not.toContain(PACKAGE_SURFACE_CHAIN);
   });
 
   it("states that gen-tests and investigate do not persist evidence manifests", () => {
@@ -54,14 +49,14 @@ describe("Issue #12 docs drift", () => {
     const readme = readText("README.md");
     const topMatter = readme.split(/\n---\n/)[0] ?? "";
 
-    expect(topMatter).toContain("manifest-producing surfaces emit redacted evidence for audit.");
+    expect(topMatter).toMatch(/manifest-producing surfaces emit redacted evidence for audit/i);
     expect(topMatter).not.toMatch(/\b(?:every|each)\s+run\b.*\bmanifest\b/i);
   });
 
   it("keeps shipped README repository docs links resolvable outside the tarball", () => {
     const readme = readText("README.md");
 
-    expect(readme).toContain("https://github.com/oscharko-dev/Keiko/tree/dev/docs");
+    expect(readme).toContain("https://github.com/oscharko-dev/Keiko/blob/dev/docs/ui-runbook.md");
     expect(readme).not.toMatch(/\]\((?:\.\/)?docs\//);
   });
 
@@ -69,12 +64,11 @@ describe("Issue #12 docs drift", () => {
     const readme = readText("README.md");
     const uiRunbook = readText("docs/ui-runbook.md");
 
-    expect(readme).toContain(
-      "`keiko ui` can also create a local runtime config during first-run setup.",
+    expect(readme).toContain("The UI can create a local runtime config during first-run setup.");
+    expect(readme).toContain("Keiko calls the gateway model list endpoint");
+    expect(uiRunbook).toContain(
+      "They are not a standalone UI configuration source when the UI needs to discover models",
     );
-    expect(readme).toContain("Gateway config file required for model-backed UI runs");
-    expect(uiRunbook).toContain("keiko ui --config <path>");
-    expect(uiRunbook).toContain("They are not a standalone UI configuration source.");
     expect(uiRunbook).toContain('"code": "NO_MODEL"');
     expect(uiRunbook).toContain('"message": "No model provider is configured."');
     expect(uiRunbook).not.toContain("NO_MODEL_CONFIGURED");
@@ -103,7 +97,7 @@ describe("Issue #12 docs drift", () => {
 
     expect(uiServer).toContain("export const DEFAULT_UI_PORT = 1983");
     expect(readme).toContain("Port to bind (default: 1983)");
-    expect(uiRunbook).toContain("default `1983`");
+    expect(uiRunbook).toContain("default port is `1983`");
   });
 
   it("keeps release docs and UI copy free of customer-specific model wording", () => {
@@ -141,12 +135,14 @@ describe("Issue #12 docs drift", () => {
     }
   });
 
-  it("states that structured-diff defaults require workflow-capable chat models", () => {
+  it("states that UI model choices are limited to callable chat models", () => {
     const runbook = readText("docs/pilot/runbook.md");
+    const uiRunbook = readText("docs/ui-runbook.md");
 
     expect(runbook).toContain(
-      "Keiko selects only configured chat models that declare both tool-calling and structured output.",
+      "Keiko selects only configured chat models that pass the gateway smoke test.",
     );
+    expect(uiRunbook).toContain("Non-chat models are not offered for chat or workflow execution.");
     expect(runbook).toContain("Keep local gateway configs out of version control.");
   });
 
