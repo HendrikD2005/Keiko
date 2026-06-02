@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../../src/cli/runner.js";
+import { SDK_VERSION } from "../../src/sdk/index.js";
 
 interface Captured {
   readonly io: CliIo;
@@ -22,6 +24,23 @@ function makeIo(): Captured {
     out: (): string => outChunks.join(""),
     err: (): string => errChunks.join(""),
   };
+}
+
+function isPackageJson(value: unknown): value is { readonly version: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "version" in value &&
+    typeof value.version === "string"
+  );
+}
+
+function packageVersion(): string {
+  const parsed: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+  if (!isPackageJson(parsed)) {
+    throw new Error("package.json version is missing");
+  }
+  return parsed.version;
 }
 
 describe("runCli", () => {
@@ -51,7 +70,8 @@ describe("runCli", () => {
     const c = makeIo();
     const code = runCli([flag], c.io);
     expect(code).toBe(0);
-    expect(c.out()).toMatch(/^keiko \d+\.\d+\.\d+\n$/);
+    expect(SDK_VERSION).toBe(packageVersion());
+    expect(c.out()).toBe(`keiko ${packageVersion()}\n`);
     expect(c.err()).toBe("");
   });
 
@@ -60,6 +80,8 @@ describe("runCli", () => {
     const code = runCli(["--help"], c.io);
     expect(code).toBe(0);
     expect(c.out()).toContain("keiko evidence");
+    expect(c.out()).toContain("keiko init");
+    expect(c.out()).toContain("keiko start|stop|status|restart");
   });
 
   it("dispatches the evidence subcommand (usage error 2 with no subcommand, no disk touched)", () => {

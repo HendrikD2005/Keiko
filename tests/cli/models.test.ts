@@ -24,27 +24,15 @@ function makeIo(): Captured {
   };
 }
 
-const REQUIRED_IDS = [
-  "Qwen3-Coder-480B-A35B-Instruct-FP8",
-  "Qwen/Qwen3-Coder-Next-FP8",
-  "Devstral-2-123B-Instruct-2512",
-  "gpt-oss-120b",
-  "Mistral-Small-3.1-24B-Instruct-2503",
-  "Qwen2.5-Coder-7B-Instruct",
-  "gemma-4-31b-it",
-  "dotsocr",
-  "multilingual-e5-large Embedding",
-];
-
-const API_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{16,}/;
+const API_KEY_PATTERN = /\b(?:sk-[A-Za-z0-9_-]{16,}|example-test-token-[A-Za-z0-9_-]{8,})/;
 
 function validConfig(): string {
   return JSON.stringify({
     providers: [
       {
-        modelId: "gpt-oss-120b",
+        modelId: "example-chat-model",
         baseUrl: "https://host.example/v1",
-        apiKey: "sk-secret-config-value-1234567890",
+        apiKey: "example-test-token-1234567890",
         timeoutMs: 30000,
         maxRetries: 3,
         retryBaseDelayMs: 500,
@@ -55,13 +43,11 @@ function validConfig(): string {
 }
 
 describe("runModelsCli list", () => {
-  it("lists all nine models on stdout and exits 0", () => {
+  it("lists only the header when no built-in models are shipped", () => {
     const c = makeIo();
     const code = runModelsCli(["list"], c.io, {});
     expect(code).toBe(0);
-    for (const id of REQUIRED_IDS) {
-      expect(c.out()).toContain(id);
-    }
+    expect(c.out().trim()).toBe("ID\tKIND\tCOST\tLATENCY\tTOOLS\tSTRUCT\tUSE-CASES");
   });
 
   it("emits no credential-like value in the list output", () => {
@@ -109,6 +95,47 @@ describe("runModelsCli validate", () => {
     expect(c.err()).toContain("GATEWAY_CONFIG_INVALID");
   });
 
+  it("accepts a config whose modelId is absent from the built-in capability registry", () => {
+    const path = join(dir, "unknown-model.json");
+    const parsed = JSON.parse(validConfig()) as {
+      providers: { modelId: string }[];
+    };
+    const provider = parsed.providers[0];
+    if (provider === undefined) {
+      throw new Error("test fixture must include one provider");
+    }
+    provider.modelId = "not-in-registry";
+    writeFileSync(path, JSON.stringify(parsed), "utf8");
+    const c = makeIo();
+    const code = runModelsCli(["validate", "--config", path], c.io, {});
+    expect(code).toBe(0);
+    expect(c.out()).toContain("valid");
+  });
+
+  it("accepts a config whose unregistered modelId declares local capability metadata", () => {
+    const path = join(dir, "custom-model.json");
+    const parsed = JSON.parse(validConfig()) as {
+      providers: Record<string, unknown>[];
+    };
+    const provider = parsed.providers[0];
+    if (provider === undefined) {
+      throw new Error("test fixture must include one provider");
+    }
+    provider.modelId = "example-private-chat";
+    provider.capability = {
+      kind: "chat",
+      toolCalling: true,
+      structuredOutput: true,
+      costClass: "medium",
+      latencyClass: "standard",
+    };
+    writeFileSync(path, JSON.stringify(parsed), "utf8");
+    const c = makeIo();
+    const code = runModelsCli(["validate", "--config", path], c.io, {});
+    expect(code).toBe(0);
+    expect(c.out()).toContain("valid");
+  });
+
   it("never prints a credential value when reporting a validation error", () => {
     const path = join(dir, "leak.json");
     writeFileSync(
@@ -116,7 +143,7 @@ describe("runModelsCli validate", () => {
       JSON.stringify({
         providers: [
           {
-            modelId: "gpt-oss-120b",
+            modelId: "example-chat-model",
             baseUrl: "https://h/v1",
             apiKey: "sk-leaky-1234567890abcdef",
             timeoutMs: -1,

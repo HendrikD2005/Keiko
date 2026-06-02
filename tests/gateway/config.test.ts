@@ -16,9 +16,9 @@ interface RawProvider {
 
 function validProvider(): RawProvider {
   return {
-    modelId: "gpt-oss-120b",
+    modelId: "example-chat-model",
     baseUrl: "https://host.example/v1",
-    apiKey: "sk-secret-key-value-1234567890",
+    apiKey: "example-test-token-1234567890",
     timeoutMs: 30000,
     maxRetries: 3,
     retryBaseDelayMs: 500,
@@ -44,7 +44,7 @@ describe("parseGatewayConfig", () => {
   it("parses a structurally valid config", () => {
     const config = parseGatewayConfig(validRaw());
     expect(config.providers).toHaveLength(1);
-    expect(config.providers[0]?.modelId).toBe("gpt-oss-120b");
+    expect(config.providers[0]?.modelId).toBe("example-chat-model");
     expect(config.circuitBreaker.failureThreshold).toBe(5);
   });
 
@@ -64,13 +64,56 @@ describe("parseGatewayConfig", () => {
       expect.unreachable("should have thrown");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigInvalidError);
-      expect((error as Error).message).not.toContain("sk-secret-key-value-1234567890");
+      expect((error as Error).message).not.toContain("example-test-token-1234567890");
     }
   });
 
   it("rejects a non-positive timeoutMs", () => {
     const raw = rawWithProvider((p) => ({ ...p, timeoutMs: -1 }));
     expect(() => parseGatewayConfig(raw)).toThrow(/timeoutMs/);
+  });
+
+  it("accepts a provider modelId that is not in the capability registry", () => {
+    const raw = rawWithProvider((p) => ({ ...p, modelId: "not-in-registry" }));
+    const config = parseGatewayConfig(raw);
+    expect(config.providers[0]?.modelId).toBe("not-in-registry");
+  });
+
+  it("accepts an unregistered provider when capability metadata is declared", () => {
+    const raw = rawWithProvider((p) => ({
+      ...p,
+      modelId: "example-private-chat",
+      capability: {
+        kind: "chat",
+        contextWindow: 64_000,
+        maxOutputTokens: 4_096,
+        toolCalling: true,
+        structuredOutput: true,
+        streaming: true,
+        costClass: "medium",
+        latencyClass: "fast",
+        throughputHint: "local endpoint",
+        preferredUseCases: ["Local coding workflow"],
+        knownLimitations: ["Validate against the target endpoint"],
+      },
+    }));
+    const config = parseGatewayConfig(raw);
+    expect(config.providers[0]?.modelId).toBe("example-private-chat");
+    expect(config.capabilities?.[0]).toMatchObject({
+      id: "example-private-chat",
+      kind: "chat",
+      toolCalling: true,
+      structuredOutput: true,
+    });
+  });
+
+  it("rejects custom capability metadata whose id differs from the provider modelId", () => {
+    const raw = rawWithProvider((p) => ({
+      ...p,
+      modelId: "example-private-chat",
+      capability: { id: "other-model", kind: "chat" },
+    }));
+    expect(() => parseGatewayConfig(raw)).toThrow(/capability\.id/);
   });
 
   it("rejects an empty providers array", () => {
@@ -81,32 +124,32 @@ describe("parseGatewayConfig", () => {
 
   it("file apiKey takes precedence over KEIKO_DEFAULT_API_KEY", () => {
     const config = parseGatewayConfig(validRaw(), {
-      KEIKO_DEFAULT_API_KEY: "sk-env-default-1234567890abcd",
+      KEIKO_DEFAULT_API_KEY: "example-env-token-1234567890abcd",
     });
-    expect(config.providers[0]?.apiKey).toBe("sk-secret-key-value-1234567890");
+    expect(config.providers[0]?.apiKey).toBe("example-test-token-1234567890");
   });
 
   it("env per-model base url overrides file base url", () => {
     const config = parseGatewayConfig(validRaw(), {
-      KEIKO_MODEL_GPT_OSS_120B_BASE_URL: "https://override.example/v1",
+      KEIKO_MODEL_EXAMPLE_CHAT_MODEL_BASE_URL: "https://override.example/v1",
     });
     expect(config.providers[0]?.baseUrl).toBe("https://override.example/v1");
   });
 
   it("env per-model api key overrides file api key", () => {
     const config = parseGatewayConfig(validRaw(), {
-      KEIKO_MODEL_GPT_OSS_120B_API_KEY: "sk-per-model-override-1234567890",
+      KEIKO_MODEL_EXAMPLE_CHAT_MODEL_API_KEY: "example-per-model-token-1234567890",
     });
-    expect(config.providers[0]?.apiKey).toBe("sk-per-model-override-1234567890");
+    expect(config.providers[0]?.apiKey).toBe("example-per-model-token-1234567890");
   });
 
   it("global default fills in a provider with no key from file or per-model env", () => {
     const raw = rawWithProvider(({ apiKey: _drop, ...rest }) => rest);
     const config = parseGatewayConfig(raw, {
-      KEIKO_DEFAULT_API_KEY: "sk-env-default-1234567890abcd",
+      KEIKO_DEFAULT_API_KEY: "example-env-token-1234567890abcd",
       KEIKO_DEFAULT_BASE_URL: "https://default.example/v1",
     });
-    expect(config.providers[0]?.apiKey).toBe("sk-env-default-1234567890abcd");
+    expect(config.providers[0]?.apiKey).toBe("example-env-token-1234567890abcd");
   });
 
   describe("baseUrl validation", () => {
@@ -134,8 +177,18 @@ describe("parseGatewayConfig", () => {
       }
     });
 
-    it("accepts a private/internal IP baseUrl (customer-internal endpoint use case)", () => {
+    it("rejects a plaintext non-loopback baseUrl", () => {
       const raw = rawWithProvider((p) => ({ ...p, baseUrl: "http://10.0.0.5:8000/v1" }));
+      expect(() => parseGatewayConfig(raw)).toThrow(/https/);
+    });
+
+    it("accepts a plaintext loopback baseUrl for local development", () => {
+      const raw = rawWithProvider((p) => ({ ...p, baseUrl: "http://127.0.0.1:8000/v1" }));
+      expect(() => parseGatewayConfig(raw)).not.toThrow();
+    });
+
+    it("accepts a plaintext IPv6 loopback baseUrl for local development", () => {
+      const raw = rawWithProvider((p) => ({ ...p, baseUrl: "http://[::1]:8000/v1" }));
       expect(() => parseGatewayConfig(raw)).not.toThrow();
     });
 
@@ -147,19 +200,44 @@ describe("parseGatewayConfig", () => {
 });
 
 describe("toSafeObject", () => {
-  it("omits the apiKey field entirely", () => {
+  it("omits credential and endpoint fields entirely", () => {
     const config = parseGatewayConfig(validRaw());
     const safe = toSafeObject(config);
     const serialised = JSON.stringify(safe);
-    expect(serialised).not.toContain("sk-secret-key-value-1234567890");
+    expect(serialised).not.toContain("example-test-token-1234567890");
     expect(serialised).not.toContain("apiKey");
+    expect(serialised).not.toContain("https://host.example/v1");
+    expect(serialised).not.toContain("baseUrl");
   });
 
   it("preserves non-secret fields", () => {
     const config = parseGatewayConfig(validRaw());
     const safe = toSafeObject(config);
-    expect(safe.providers[0]?.modelId).toBe("gpt-oss-120b");
-    expect(safe.providers[0]?.baseUrl).toBe("https://host.example/v1");
+    expect(safe.providers[0]?.modelId).toBe("example-chat-model");
+    expect(safe.providers[0]?.timeoutMs).toBe(30000);
+  });
+
+  it("preserves declared capability metadata without provider secrets", () => {
+    const config = parseGatewayConfig(
+      rawWithProvider((p) => ({
+        ...p,
+        modelId: "example-private-chat",
+        capability: {
+          kind: "chat",
+          toolCalling: true,
+          structuredOutput: true,
+        },
+      })),
+    );
+    const safe = toSafeObject(config);
+    expect(safe.capabilities?.[0]).toMatchObject({
+      id: "example-private-chat",
+      kind: "chat",
+      toolCalling: true,
+      structuredOutput: true,
+    });
+    expect(JSON.stringify(safe)).not.toContain("example-test-token-1234567890");
+    expect(JSON.stringify(safe)).not.toContain("https://host.example/v1");
   });
 });
 
@@ -176,7 +254,7 @@ describe("loadConfigFromFile", () => {
     const path = join(dir, "config.json");
     writeFileSync(path, JSON.stringify(validRaw()), "utf8");
     const config = loadConfigFromFile(path);
-    expect(config.providers[0]?.modelId).toBe("gpt-oss-120b");
+    expect(config.providers[0]?.modelId).toBe("example-chat-model");
   });
 
   it("throws ConfigInvalidError for a missing file", () => {
@@ -193,8 +271,8 @@ describe("loadConfigFromFile", () => {
     const path = join(dir, "merge.json");
     writeFileSync(path, JSON.stringify(validRaw()), "utf8");
     const config = loadConfigFromFile(path, {
-      KEIKO_MODEL_GPT_OSS_120B_API_KEY: "sk-file-load-override-1234567890",
+      KEIKO_MODEL_EXAMPLE_CHAT_MODEL_API_KEY: "example-file-load-token-1234567890",
     });
-    expect(config.providers[0]?.apiKey).toBe("sk-file-load-override-1234567890");
+    expect(config.providers[0]?.apiKey).toBe("example-file-load-token-1234567890");
   });
 });

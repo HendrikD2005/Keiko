@@ -8,7 +8,7 @@ function manifest(over: Partial<EvidenceManifest> = {}): EvidenceManifest {
     run: {
       runId: "run-1",
       fingerprint: "fp-xyz",
-      harnessVersion: "0.1.0",
+      harnessVersion: "0.1.0-beta.2",
       taskType: "investigate-bug",
       outcome: "completed",
       startedAt: 100,
@@ -73,6 +73,19 @@ describe("buildEvidenceReport", () => {
     );
     expect(report.changedFiles).toBe(3);
     expect(report.verificationStatus).toBe("passed");
+  });
+
+  it("derives verification status from harness verification events when no #7 summary exists", () => {
+    const report = buildEvidenceReport(
+      manifest({
+        verificationResults: [
+          { seq: 1, ts: 100, passed: true, detail: "ok" },
+          { seq: 2, ts: 110, passed: false, detail: "not ok" },
+        ],
+      }),
+      "/repo/.keiko/evidence/run-1.json",
+    );
+    expect(report.verificationStatus).toBe("failed");
   });
 });
 
