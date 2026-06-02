@@ -6,6 +6,7 @@ import type {
 } from "../../../src/workflows/unit-tests/types.js";
 import { SKIP_UNRESOLVED } from "../../../src/workflows/unit-tests/verify-stage.js";
 import { memFs } from "../../workspace/_memfs.js";
+import { recordingSpawn, scriptChildClose } from "../../verification/_support.js";
 import { recordingSink, recordingWriter, response, scriptedModel } from "./_support.js";
 
 const ROOT = "/repo";
@@ -95,6 +96,18 @@ describe("generateUnitTests — dry-run (AC #2/#4/#6/#8)", () => {
     expect(report.proposedDiff).toContain("tests/add.test.ts");
   });
 
+  it("rejects an empty diff instead of accepting a no-op dry-run", async () => {
+    const model = scriptedModel([response({ content: "```diff\n\n```" })]);
+    const report = await generateUnitTests(
+      input({ limits: { maxModelCalls: 1, maxRetries: 0 } }),
+      deps(model.port),
+    );
+    expect(report.status).toBe("rejected");
+    expect(report.nextActions[0]).toContain("empty");
+    expect(report.proposedDiff).toBeUndefined();
+    expect(report.addedTestFiles).toHaveLength(0);
+  });
+
   it("emits a redacted progress event stream with the shared envelope", async () => {
     const model = scriptedModel([response({ content: FENCED_VALID })]);
     const sink = recordingSink();
@@ -181,11 +194,37 @@ describe("generateUnitTests — limits & lifecycle", () => {
   });
 });
 
-describe("generateUnitTests — apply mode verification skip (T2)", () => {
-  it("skips verification and records SKIP_UNRESOLVED when testFramework is unknown", async () => {
-    // Package.json with no vitest/jest/mocha → testFramework === "unknown"
+describe("generateUnitTests — apply mode verification", () => {
+  it("falls back to a runnable npm test script when testFramework is unknown (AC #8)", async () => {
     const unknownFs = memFs(ROOT, {
       "package.json": JSON.stringify({ name: "no-framework", scripts: { test: "echo ok" } }),
+      "src/add.ts": "export const add = (a: number, b: number): number => a + b;",
+    });
+    const model = scriptedModel([response({ content: FENCED_VALID })]);
+    const writer = recordingWriter();
+    const spawn = recordingSpawn();
+    const autoClosingSpawn: typeof spawn.fn = (command, args, options) => {
+      const child = spawn.fn(command, args, options);
+      scriptChildClose(spawn.child, { stdout: "ok\n", exitCode: 0 });
+      return child;
+    };
+    const report = await generateUnitTests(input({ apply: true }), {
+      model: model.port,
+      fs: unknownFs,
+      writer,
+      spawn: autoClosingSpawn,
+      now: () => 1000,
+      idSource: () => "run-1",
+    });
+    expect(report.status).toBe("completed");
+    expect(report.verificationSummary?.overallStatus).toBe("passed");
+    expect(report.verificationSkipReason).toBeUndefined();
+    expect(spawn.calls()[0]?.args).toEqual(["test"]);
+  });
+
+  it("skips verification when no test command resolves", async () => {
+    const unknownFs = memFs(ROOT, {
+      "package.json": JSON.stringify({ name: "no-framework" }),
       "src/add.ts": "export const add = (a: number, b: number): number => a + b;",
     });
     const model = scriptedModel([response({ content: FENCED_VALID })]);

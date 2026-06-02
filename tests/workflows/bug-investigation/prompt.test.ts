@@ -17,6 +17,9 @@ describe("buildBugPrompt (AC #9 prompt construction)", () => {
     const system = messages.find((m) => m.role === "system")?.content ?? "";
     expect(system).toContain("root-cause");
     expect(system).toContain("```diff");
+    expect(system).toContain("--- a/<path>");
+    expect(system).toContain("*** Begin Patch");
+    expect(system).toContain("\\n+");
     expect(system).toContain("## Regression test");
     expect(system).toContain("## Uncertainty");
     expect(system).toContain("vitest");
@@ -44,6 +47,30 @@ describe("buildBugPrompt (AC #9 prompt construction)", () => {
     expect(user).toContain("half() returns the wrong value");
     expect(user).toContain("expected 5 to equal 3");
     expect(user).toContain("src/buggy.ts:1");
+  });
+
+  it("redacts secret-shaped failure evidence before model prompt construction", () => {
+    const secret = "Bearer tiny_token";
+    const report: BugReportInput = {
+      description: `do not leak ${secret}`,
+      failingOutput: `AssertionError token=${secret}`,
+      stackTrace: `at half (src/buggy.ts:1:40) Bearer ${secret}`,
+    };
+    const messages = buildBugPrompt(report, parseFailureEvidence(report), makePack([]), "vitest");
+    const user = messages.find((m) => m.role === "user")?.content ?? "";
+    expect(user).not.toContain(secret);
+    expect(user).toContain("[REDACTED]");
+    expect(user).toContain("Bearer [REDACTED]");
+  });
+
+  it("redacts secret-shaped evidence before the final prompt clamp", () => {
+    const secret = `ghp_${"C".repeat(36)}`;
+    const report: BugReportInput = {
+      failingOutput: `${"a".repeat(16_380)}${secret}`,
+    };
+    const messages = buildBugPrompt(report, parseFailureEvidence(report), makePack([]), "vitest");
+    const user = messages.find((m) => m.role === "user")?.content ?? "";
+    expect(user).not.toContain(secret);
   });
 
   it("embeds redacted context excerpts when the pack is non-empty", () => {

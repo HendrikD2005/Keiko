@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -186,6 +186,19 @@ describe("readWorkspaceFile", () => {
     expect(() => readWorkspaceFile(detectWorkspace(dir), ".env")).toThrow(PathDeniedError);
   });
 
+  it("refuses to read a symlink alias whose real target is denied", () => {
+    file(".env", "SECRET=1");
+    symlinkSync(join(dir, ".env"), join(dir, "alias.env"));
+    expect(() => readWorkspaceFile(detectWorkspace(dir), "alias.env")).toThrow(PathDeniedError);
+  });
+
+  it("refuses to read hard-linked aliases for context ingestion", () => {
+    file(".env", "DB_PASSWORD=bank-super-secret\n");
+    mkdirSync(join(dir, "src"), { recursive: true });
+    linkSync(join(dir, ".env"), join(dir, "src", "config.ts"));
+    expect(() => readWorkspaceFile(detectWorkspace(dir), "src/config.ts")).toThrow(PathDeniedError);
+  });
+
   it("denied-path error carries the WORKSPACE_PATH_DENIED code", () => {
     file(".env", "SECRET=1");
     let caught: unknown;
@@ -277,7 +290,9 @@ describe("nodeWorkspaceFs.exists", () => {
     let statCallCount = 0;
     const eaccesStat = (): WorkspaceStat => {
       statCallCount += 1;
-      throw Object.assign(new Error("EACCES: permission denied, stat '/locked'"), { code: "EACCES" });
+      throw Object.assign(new Error("EACCES: permission denied, stat '/locked'"), {
+        code: "EACCES",
+      });
     };
     const fs: WorkspaceFs = {
       readFileUtf8: (): string => "",
