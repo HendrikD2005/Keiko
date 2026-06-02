@@ -1,6 +1,6 @@
 # Wave 1 Pilot Go/No-Go Assessment
 
-**Audience:** pilot program leadership, customer model evaluators, release decision-makers
+**Audience:** pilot program leadership, model evaluators, release decision-makers
 
 **Status:** baseline criteria for automated harness validation; final pilot Go/No-Go requires human-reviewed live model evaluation.
 
@@ -13,12 +13,12 @@ The evaluation harness (`keiko evaluate`) measures the two Wave 1 developer work
 **What the harness establishes:**
 
 - **Offline mode (deterministic):** The harness machinery, safety guards, and audit pipeline work end-to-end as a composed system. Scripted model transcripts prove that the parser, patch validator, verification machinery, and evidence-persistence layer all function correctly under controlled inputs.
-- **Live mode (opt-in):** Real-world model behaviour against a candidate customer model, with recorded evidence manifests linking scores to audit trails for pilot-team review.
+- **Live mode (opt-in):** Real-world model behaviour against a candidate model, with recorded evidence manifests linking scores to audit trails for pilot-team review.
 
 **What the harness does NOT measure:**
 
 - Real model output quality, token efficiency, or sensitivity to prompt variations. Offline mock transcripts are hand-authored; they exercise harness machinery deterministically but do not measure model performance.
-- Model safety or appropriateness for your customer domain. Live evaluation is opt-in; a team that never runs `--live` has no evidence of real model behaviour.
+- Model safety or appropriateness for your domain. Live evaluation is opt-in; a team that never runs `--live` has no evidence of real model behaviour.
 - Edge cases or feature completeness beyond the Wave 1 fixture set (≥3 fixtures per workflow).
 
 ---
@@ -58,8 +58,8 @@ No credentials required. Runs in CI. Deterministic, reproducible.
 ### Live mode (opt-in)
 
 ```bash
-keiko evaluate --live --model gpt-4
-keiko evaluate --live --model claude-opus
+keiko evaluate --live --model example-chat-model
+keiko evaluate --live --model example-reasoning-model
 ```
 
 Requires:
@@ -132,7 +132,7 @@ The pilot team runs `keiko evaluate --live --model <candidate-model>` and review
 
 1. **Per-dimension scores** against the pilot's quality bar for your domain (e.g., "test-pass-rate must exceed 85% on realistic code samples").
 2. **Linked evidence manifests** (`EvalScorecard.liveRunContext.evidenceRefs`) — inspect the raw workflow reports and redacted audit trails to understand failure modes.
-3. **Model identity and config** (`EvalScorecard.liveRunContext.configDescriptor` and `liveRunContext.modelId`) — confirm the tested model and gateway settings match your deployment target.
+3. **Model identity and config** (`EvalScorecard.liveRunContext.configDescriptor` and `liveRunContext.modelId`) — confirm the tested model and gateway settings match your runtime target.
 
 No machine-computable threshold is published for live evaluation; the pilot team's domain expertise determines readiness.
 
@@ -147,7 +147,7 @@ Offline fixtures are hand-authored by the harness author. They exercise the harn
 - Real model output quality or usefulness
 - Token efficiency or cost per invocation
 - Sensitivity to prompt variations or instruction tuning
-- Performance on your customer's codebase characteristics
+- Performance on the pilot codebase characteristics
 
 A green offline score means "the harness machinery works," not "the model is ready for production."
 
@@ -177,5 +177,5 @@ Offline fixtures score these dimensions as "not-applicable" unless configured ot
 
 ## References
 
-- **ADR-0012: Wave 1 Evaluation Harness and Model Benchmarks** — full design, decision rationale, and implementation contract. See especially decisions D6 (dimensions), D7 (surface-parity), D8 (output schema), D10 (CLI), and D13 (Go/No-Go criteria). [../adr/ADR-0012-wave-1-evaluation-harness-and-model-benchmarks.md](../adr/ADR-0012-wave-1-evaluation-harness-and-model-benchmarks.md)
+- **ADR-0012: Evaluation harness and model benchmarks** — compact architecture decision for the scorecard and Go/No-Go review. [../adr/README.md#adr-0012](../adr/README.md#adr-0012)
 - **Issue #11: Create Wave 1 evaluation harness and model benchmark fixtures** — acceptance criteria and delivery evidence.

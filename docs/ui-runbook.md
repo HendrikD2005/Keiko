@@ -2,13 +2,29 @@
 
 **Audience:** Development teams and pilot customers running Keiko's locally hosted UI.
 
-**Status:** Wave 1 foundation. The UI is a first-class surface alongside the CLI and SDK. This runbook covers launch, runtime requirements, local-only security posture, and accessibility baseline. The full pilot operations runbook (issue #12) is not yet shipped; when it lands, this content will be cross-referenced.
+**Status:** Wave 1 foundation. The UI is a first-class surface alongside the CLI and SDK. This runbook covers launch, runtime requirements, local-only security posture, and accessibility baseline. The end-to-end pilot operations runbook is the [pilot runbook](./pilot/runbook.md); it cross-references this document for UI operation.
 
 ## Overview
 
 The Keiko UI is a locally hosted Next.js application served by a Node backend (BFF). It lets you launch workflows, observe runs live from the harness event stream, review and approve patches, browse evidence manifests, and inspect model configuration—without terminal interaction. The BFF consumes the same audited harness layer as the CLI and SDK, so the UI is subject to the same dry-run-first discipline and security controls.
 
 The UI binds `127.0.0.1` only (never the public interface) and never contacts external services except the configured model endpoints (which only the harness reaches, never the browser). Secrets are redacted before reaching the browser, evidence is redacted on disk, and there is one gated write path for applying patches.
+
+## The workspace shell
+
+Opening `/` or `/launch` in the browser displays the dark, Keiko-branded workspace shell (ADR-0014). The shell is the primary surface for all local work:
+
+- **Left sidebar** — A collapsible project list with the user's recently opened local directories. An in-UI "Add project" flow lets you enter a validated absolute local path to begin a new chat session in that workspace. Project-scoped chat history appears below the project list.
+
+- **Central chat composer** — A text input with attached context. Above the text field is a model dropdown populated from the locally configured gateway and filtered to chat-capable models. Below the text field, four explicit workflow-launch buttons let you start a specific task:
+  - **Generate Tests** — automated unit test generation
+  - **Investigate Bug** — root-cause analysis and patch proposal
+  - **Explain Plan** — understanding and validation of a code area (read-only)
+  - **Verify** — standalone verification without a workflow (BFF-only, no harness session)
+
+- **Workspace tool entry area** — On tablet and desktop, the tools sit in the right-side rail. On mobile, the same project-bound entries remain reachable as a fixed bottom bar. The Files tool displays a bounded project tree and read-only previews through registered-project BFF routes that preserve deny-list, `.gitignore`, symlink-containment, and redaction semantics. Browser, Review, and Terminal tools are also available from this area.
+
+**Secondary navigation** — `Config` (gateway configuration and model registry) and `Evidence` (run history and evidence manifests) are reachable from links in the shell header's secondary navigation bar, not as equal top-level surfaces.
 
 ## Prerequisites
 
@@ -21,14 +37,13 @@ The UI binds `127.0.0.1` only (never the public interface) and never contacts ex
 **Model gateway configuration:** a configured model provider is required to run workflows. Without it:
 
 - The UI loads and all read surfaces (config inspector, evidence browser, workflow descriptors) work.
-- Launching a run returns a clear error: "No model configured."
+- Launching a run returns a clear error: "No model provider is configured."
 
-Configure the gateway via:
+Configure the gateway by providing a JSON config file:
 
-- A JSON file passed with `keiko ui --config <path>`, or
-- The `KEIKO_CONFIG_FILE` environment variable, or
-- Per-model environment variables (`KEIKO_MODEL_<UPPER_ID>_API_KEY` and `_BASE_URL`), or
-- Global fallback variables (`KEIKO_DEFAULT_API_KEY` and `_BASE_URL`).
+- A JSON file passed with `keiko ui --config <path>`.
+
+Per-model variables (`KEIKO_MODEL_<UPPER_ID>_API_KEY` and `_BASE_URL`) and global fallback variables (`KEIKO_DEFAULT_API_KEY` and `_BASE_URL`) can supply or override provider secrets referenced by that config file. They are not a standalone UI configuration source.
 
 See the [main README](../README.md#configuration-and-secrets) for the full precedence and variable names.
 
@@ -38,15 +53,16 @@ The npm-published package includes the built UI assets, so `keiko ui` works dire
 
 ```bash
 npm run build    # Compile src/ -> dist/ (includes src/ui/**, the BFF)
+npm --prefix ui ci --ignore-scripts
 npm run build:ui # Build the Next.js static export and copy into dist/ui/static/
 ```
 
-Both commands run automatically during `npm pack` (via `prepack`). The result:
+The `prepack` and `prepublishOnly` chains run `npm run clean`, `npm run build`, `npm run ui:ci`, `npm run build:ui`, and `npm run check:package-surface`. The result:
 
 - `dist/ui/static/` — the static HTML/CSS/JS export
 - `dist/ui/csp-hashes.json` — precomputed inline-script hashes for Content-Security-Policy
 
-The `build:ui` script performs an offline `npm ci` in the nested `ui/` package, builds the static export, and verifies the CSP hashes are present before copying assets into the root package. No external network is contacted.
+The chain installs the nested `ui/` dependencies with scripts disabled before `build:ui`, then builds the static export and verifies the CSP hashes before copying assets into the root package.
 
 ## Launching the UI
 
@@ -56,10 +72,10 @@ Start the server with one command:
 keiko ui
 ```
 
-The server binds to `127.0.0.1:4319` by default and prints:
+The server binds to `127.0.0.1:1983` by default and prints:
 
 ```
-Keiko UI listening on http://127.0.0.1:4319
+Keiko UI listening on http://127.0.0.1:1983
 ```
 
 Open that URL in your browser. Stop the server with Ctrl-C (SIGINT).
@@ -68,10 +84,11 @@ Open that URL in your browser. Stop the server with Ctrl-C (SIGINT).
 
 All flags are optional:
 
-- `--port <number>` — listen on a different port (default `4319`). Must be between 1 and 65535.
-- `--host 127.0.0.1|localhost` — choose the loopback host (default `127.0.0.1`). Only loopback addresses are allowed; the server never binds `0.0.0.0`.
-- `--config <path>` — path to a gateway config file (JSON). Takes precedence over environment variables.
+- `--port <number>` — listen on a different port (default `1983`). Must be between 1 and 65535.
+- `--host 127.0.0.1|localhost` — validate a loopback host value for compatibility. The server always binds `127.0.0.1` and never binds `0.0.0.0`.
+- `--config <path>` — path to a gateway config file (JSON) required for model-backed workflow runs.
 - `--evidence-dir <path>` — custom directory for evidence manifests. Defaults to `$KEIKO_EVIDENCE_DIR` or a `.keiko/evidence` subdirectory in the detected workspace.
+- `--ui-db <path>` — explicit path to the UI-local SQLite database file. Defaults to `<KEIKO_UI_DATA_DIR>/keiko-ui.db` when that environment variable is set, otherwise `~/.keiko/keiko-ui.db`. See **UI-local SQLite database** below.
 
 Example:
 
@@ -94,7 +111,9 @@ keiko ui --port 8080 --config ~/keiko.json --evidence-dir /tmp/runs
 
 **Secrets and redaction:**
 
-- Config is presented through `toSafeObject`, which strips API keys. What you see in the config inspector is stripped; keys never reach the browser.
+- Config is presented through `toSafeObject`, which strips API keys and provider endpoint URLs.
+  What you see in the config inspector is limited to non-sensitive provider settings; keys and
+  endpoints never reach the browser.
 - Live payloads (run reports, workflow projections, error messages) are redacted using the same `redact()` function that scrubs configured secret patterns and environment variable values.
 - Evidence manifests are redacted at rest (when persisted to disk) and served as-is; no further redaction is applied.
 - Live events from the harness are redacted by the harness emitter before the BFF sees them. The BFF does not retain raw event content.
@@ -105,19 +124,27 @@ keiko ui --port 8080 --config ~/keiko.json --evidence-dir /tmp/runs
 - To apply the patch, you must explicitly review the proposed diff and click the apply button. This is the only write path; it re-runs the workflow with `apply: true` through the existing gated pipeline.
 - The BFF does not reimplement, relax, or bypass workflow guards (path traversal checks, patch limits); it invokes the same audited workflows the CLI uses.
 
-## The six surfaces
+## Secondary surfaces reachable from the shell
 
-**Workflow launch** — Forms for starting a workflow. You select a workflow type (unit-test generation, bug investigation), pick a model from the registry, provide a target (file path or directory), set optional limits, and review the dry-run preview. Model selection uses the same registry the CLI consumes; cost class and latency estimates are available.
+**Live run view** — Real-time progress as a workflow executes. Shows model calls (with token usage and cost class), tool invocations (command, exit code, output), verification results (resource limits, pass/fail decisions), and reasoning traces. A cancel button is available to send a cancellation signal to the harness. The run stream closes asynchronously after the run reaches a terminal state.
 
-**Live run view** — Real-time progress as the run executes. Shows model calls (with token usage and cost class), tool invocations (command, exit code, output), verification results (resource limits, pass/fail decisions), and reasoning traces. You can cancel an in-flight run by clicking the cancel button. Cancellation is asynchronous; the stream closes after the run reaches a terminal state.
+**Patch review** — After a workflow dry-run that generates code changes, a unified diff viewer shows the proposed changes, affected file paths, and validation outcomes (linting errors, boundary violations, etc.). An explicit apply action (with confirmation) applies the patch and re-runs verification. The result is shown inline.
 
-**Patch review** — After a dry-run, a unified diff viewer shows the proposed changes, affected file paths, and validation outcomes (linting errors, boundary violations, etc.). An explicit apply action (with confirmation) applies the patch and re-runs verification. The result is shown inline; you can then review the evidence.
+**Evidence browser** — Filterable list of all past runs persisted to disk (by workflow, model, outcome, date range). Clicking a run loads the full evidence manifest: usage totals, config fingerprint, verification status, optional reasoning trace, and the git-readable diff (if generated). Evidence is redacted on disk and served as-is to the UI.
 
-**Evidence browser** — Filterable list of all past runs (by workflow, model, outcome, date). Clicking a run loads the full evidence manifest: usage totals, config fingerprint, verification status, optional reasoning trace, and the git-readable diff (if generated). Evidence is redacted on disk and served as-is to the UI.
+**Config and model inspector** — View the active gateway configuration (no API keys shown), configured model capabilities with cost class and latency bounds, and the configured limits for workflows. No secrets are displayed.
 
-**Config and model inspector** — View the active gateway configuration (no API keys shown), the full model capability registry with cost class and latency bounds, and the configured limits for workflows. No secrets are displayed.
+## Known follow-ups and MVP limitations
 
-**Run cancellation (integrated into live view)** — A cancel button appears while a run is in progress. Click it to send a cancellation signal to the harness. The UI updates when the run reaches a terminal state.
+Epic #61 (the workspace shell) is the foundation for multi-surface local interaction. The following capabilities are deferred to future work:
+
+- **Native OS folder picker** — Projects are added by entering a validated absolute local path. A native file-picker dialog is not in the MVP (epic #61 non-goal).
+- **Enterprise project-path allowlist and governance policy** — V1 validates project directories server-side (read-access checks, no write outside target). Governance policies that restrict which paths developers can open are deferred to a later governance issue.
+- **Files explorer limits** — The Files tool is read-only and project-bound. It does not edit files, execute commands, expose arbitrary host paths, or preview deny-listed paths such as `.env`, `.git`, private keys, dependency folders, build output, caches, or logs.
+- **Browser tool integration** — Placeholder entry point in the workspace tool area; full integration tracked in issue #76.
+- **Review tool integration** — Placeholder entry point in the workspace tool area; full integration tracked in issue #77.
+- **Terminal tool integration** — Placeholder entry point in the workspace tool area; full integration tracked in issue #78.
+- **Optional shared workspace history for CLI/SDK** — In V1, the CLI and SDK do not read the UI SQLite database. Unified history across surfaces is deferred; CLI/SDK-accessible chat state is a follow-up.
 
 ## Evidence and audit
 
@@ -136,32 +163,51 @@ The manifest is redacted before persistent: API keys, literals matching configur
 
 You can always export the final report shown in the patch-review surface manually, or consult the evidence browser to see all persisted dry-runs.
 
+## UI-local SQLite database
+
+The UI maintains a small SQLite database for **projects** (workspace entries the developer has opened), **chats** scoped to those projects, and **chat messages** (with optional lightweight workflow references). This persistence is local to the user account running `keiko ui` and is never shared, synced, or transmitted off the machine. The database engine is Node's built-in `node:sqlite`, so no additional runtime dependency is shipped (ADR-0013).
+
+**Location and resolution precedence.** Highest-priority first:
+
+1. `keiko ui --ui-db <path>` — explicit file path. Tests use a `mkdtemp` path here.
+2. `KEIKO_UI_DATA_DIR` environment variable. The DB file is `<KEIKO_UI_DATA_DIR>/keiko-ui.db`.
+3. Default: `~/.keiko/keiko-ui.db` under the user's home directory.
+
+The database lives under the **Keiko application data directory** and **never inside a target repository**. This is a security boundary, not a convention: a target repo's `.git/`, `.gitignore`, and `node_modules/` rules must not interact with persistence. Explicit `--ui-db` values and `KEIKO_UI_DATA_DIR` must be absolute, outside the current workspace, and not symlinked. During project onboarding, the BFF also rejects any selected project that overlaps the configured UI database path or its containing directory, even when `keiko ui` was launched outside that project. The directory is created with mode `0o700` on first run; the DB file (and its WAL/SHM sidecars) are chmodded to `0o600`. On Windows the OS-default ACL applies.
+
+**What the database holds.** Per project: the normalized absolute path (primary key), display name, favorite flag, `created_at`/`last_opened_at` timestamps. Per chat: a UUID id, project path (FK with `ON DELETE CASCADE`), title, the selected model id only (never an API key, never a provider URL), optional branch label and status, timestamps. The BFF accepts only configured chat models for chat creation and model updates. Per chat message: a UUID id, chat id (FK with `ON DELETE CASCADE`), role (`user|assistant|system`), content, timestamp, and optional `run_id`/`workflow_id`/`workflow_status`/`short_result`/`task_type` columns (the v2 `task_type` column labels non-workflow task runs such as verify and explain-plan). The `short_result` column is truncated to 200 characters and run through the BFF redactor **before** persistence.
+
+**What the database does NOT hold.** Provider credentials, API keys, base URLs, the full evidence manifest payloads, the full SSE event stream, reasoning traces, or any decrypted secret. Evidence manifests remain outside the UI DB in the path configured by `--evidence-dir`, `$KEIKO_EVIDENCE_DIR`, or the default workspace-local `.keiko/evidence/` directory; the UI DB only stores ids and short summaries. SQLite persistence belongs exclusively to the local UI/BFF layer. The CLI and SDK do not read or write `keiko-ui.db` in V1 (epic #61 non-goal).
+
+**Schema and migrations.** The schema is versioned via SQLite's `PRAGMA user_version`. Migrations are forward-only and applied transactionally on first open by the migration runner in `src/ui/store/schema.ts`. A failed migration rolls back and surfaces a typed error; the database is left at the previous version. The current schema is v2: three `STRICT` tables (`projects`, `chats`, `chat_messages`) plus three indexes. V2 added an additive `task_type` column to `chat_messages` (issue #66) to label non-workflow task runs without overloading `workflow_id`. `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL` are set on every open.
+
+**Project availability is derived, not stored.** When you delete a project's directory on disk, the row is **not** silently removed from the DB. `GET /api/projects` reports `available: false` for the missing entry so you can see and explicitly delete stale records. This avoids accidental data loss and surfaces what the UI knows.
+
 ## Accessibility status
 
-The Wave 1 UI meets **WCAG 2.2 AA** guidelines:
+The Wave 1 UI is designed and tested against **WCAG 2.2 AA** expectations:
 
-- **Keyboard operation:** All primary actions (launch, subscribe to run updates, cancel, review, apply, browse evidence) are reachable and operable via Tab, Enter, Space, and Escape.
+- **Keyboard operation:** All primary actions (sidebar collapse and expansion, project selection, model selection, workflow-mode selection, composer submission, workspace tool entries, run cancellation, patch review, apply confirmation, and evidence browsing) are reachable and operable via Tab, Enter, Space, and Escape.
 - **Semantic landmarks:** Pages use `<header>`, `<nav>`, `<main>`, and region landmarks with accessible names. A skip-to-main-content link is available on focus.
 - **Focus management:** Focus moves predictably on route changes and when opening modals or detail views.
 - **Contrast:** Text and meaningful UI elements meet AA contrast ratios. Design tokens ensure consistent sizing and spacing.
 - **Live regions:** Status updates (e.g., "Run started", "Patch applied") are announced to screen readers via ARIA live regions.
 
-The UI passed:
+The repository evidence currently includes automated `jest-axe` coverage, keyboard-behavior tests, focus-ring regression tests, and route-level shell integration tests. These checks cover the shell, sidebar, composer, workflow selector, model dropdown, dialogs, right-tool entry points, and secondary navigation. A real assistive-technology review is still required before making an externally certified WCAG conformance claim.
 
-- An **axe-core CI gate** (zero critical violations reported by automated scanning).
-- A **manual keyboard and screen-reader review** by an accessibility specialist.
-
-Axe-core covers automatable accessibility rules (roughly 30–50% of WCAG). The manual review covers keyboard navigation, focus order, screen-reader compatibility, and edge cases. Full details of the manual review and any recommendations are documented in the pilot report (issue #12, when shipped).
+Axe-core covers automatable accessibility rules (roughly 30–50% of WCAG). Keyboard tests and browser verification cover interaction risks that axe cannot prove, while a release-grade pilot report must record any manual screen-reader findings and recommendations.
 
 ## CI and verification
 
-The UI is built and tested in a dedicated, offline `ui` job:
+The UI is built and tested in a dedicated `ui` job:
 
 ```
-npm --prefix ui ci           # Install ui/ dependencies (offline, from ui/package-lock.json)
+npm --prefix ui ci --ignore-scripts # Install ui/ dependencies from ui/package-lock.json
+npm --prefix ui audit --audit-level=moderate
 npm --prefix ui run lint     # ESLint + a11y rules
 npm --prefix ui run typecheck # Type-check (DOM-aware TypeScript)
 npm --prefix ui run build    # Static export
+npm --prefix ui sbom --sbom-format cyclonedx --omit dev
 npm --prefix ui run test     # Component and smoke tests (jsdom, no browser download)
 keiko ui (health smoke)      # Start the server and poll /api/health
 ```
@@ -204,15 +250,15 @@ Refused to load the script because it violates the Content-Security-Policy direc
 2. Verify `dist/ui/csp-hashes.json` exists and is valid JSON.
 3. If either is missing, run `npm run build:ui` again.
 
-### Runs error with "No model configured"
+### Runs error with "No model provider is configured"
 
 You try to launch a workflow and see:
 
 ```json
 {
   "error": {
-    "code": "NO_MODEL_CONFIGURED",
-    "message": "No model configured. Provide a gateway config via --config or environment variables."
+    "code": "NO_MODEL",
+    "message": "No model provider is configured."
   }
 }
 ```
@@ -225,9 +271,9 @@ You try to launch a workflow and see:
    {
      "providers": [
        {
-         "modelId": "claude-opus",
+         "modelId": "example-chat-model",
          "apiKey": "sk-...",
-         "baseUrl": "https://api.anthropic.com"
+         "baseUrl": "https://llm-gateway.example.com/v1"
        }
      ]
    }
@@ -239,22 +285,15 @@ You try to launch a workflow and see:
    keiko ui --config ./keiko.json
    ```
 
-   Or set the environment variable:
-
-   ```bash
-   export KEIKO_CONFIG_FILE=./keiko.json
-   keiko ui
-   ```
-
 See the [main README](../README.md#configuration-and-secrets) for the full precedence and available environment variables.
 
 ### Server starts but browser cannot connect
 
-**Cause:** A firewall or network policy is blocking `localhost:4319`.
+**Cause:** A firewall or network policy is blocking `localhost:1983`.
 
 **Fix:**
 
-- On the local machine, `http://127.0.0.1:4319` should always work.
+- On the local machine, `http://127.0.0.1:1983` should always work.
 - If you see a "connection refused" error, ensure the port is not already in use.
 - If you changed the port with `--port`, use the correct port in the browser URL.
 
@@ -264,19 +303,19 @@ The server has conservative timeouts (30 seconds for a full request, 10 seconds 
 
 If a run times out, cancel it and try again. Evidence is persisted even on timeout, so you can inspect partial results in the evidence browser.
 
-## Relationship to issue #12
+## Relationship to the pilot runbook
 
-Issue #12 is the **dedicated pilot customer runbook**, which will provide end-to-end guidance for running Wave 1 workflows in a pilot environment, including:
+The [pilot runbook](./pilot/runbook.md) is the end-to-end guide for running Wave 1 workflows in a pilot environment, covering:
 
 - Multi-day pilot setup and team coordination
-- Incident response and escalation
+- Feedback collection and escalation
 - Evidence retention and audit controls
-- Feedback collection and iteration
+- Evaluation and the Go/No-Go decision
 
-This document (**#13 runbook**) provides the **UI operations content** and should be folded into or cross-referenced by the #12 runbook when it ships. For now, use this guide to launch and operate the UI, and refer to the [main README](../README.md) for CLI/SDK usage and configuration.
+This document provides the **UI operations content** the pilot runbook references. Use this guide to launch and operate the UI; use the pilot runbook for pilot-wide process, and the [main README](../README.md) for CLI/SDK usage and configuration.
 
 ## Further reading
 
-- [ADR-0011: Wave-1 User Interface and Packaging](./adr/ADR-0011-wave-1-user-interface-and-packaging.md) — Architecture, design decisions, and the BFF API contract.
+- [Architecture decisions](./adr/README.md#adr-0011) — UI packaging and BFF boundary.
 - [WCAG 2.2 AA](https://www.w3.org/TR/WCAG22/) — Accessibility standard.
 - [Main README](../README.md) — CLI commands, SDK usage, gateway configuration.

@@ -25,7 +25,7 @@ export interface EvidenceRunIdentity {
   readonly runId: string;
   readonly fingerprint: string;
   readonly harnessVersion: string;
-  readonly taskType: TaskType;
+  readonly taskType: EvidenceTaskType;
   readonly outcome: RunOutcome;
   readonly startedAt: number;
   readonly finishedAt: number;
@@ -77,6 +77,29 @@ export interface EvidenceCommandExecution {
   readonly durationMs: number;
 }
 
+// One sandbox configuration snapshot (from sandbox:configured). Names/limits only — no env values,
+// command args, output, or paths.
+export interface EvidenceSandboxConfiguration {
+  readonly seq: number;
+  readonly ts: number;
+  readonly envAllowlist: readonly string[];
+  readonly network: "inherit" | "none";
+  readonly maxOutputBytes: number;
+  readonly timeoutMs: number;
+  readonly terminationGraceMs: number;
+  readonly cwdRequested: boolean;
+}
+
+// One harness verification result (from verification:result). The full #7 verification audit summary
+// remains in `verification`; this compact event projection keeps the #4 harness structural
+// verification visible even when no #7 report was supplied.
+export interface EvidenceVerificationResult {
+  readonly seq: number;
+  readonly ts: number;
+  readonly passed: boolean;
+  readonly detail: string;
+}
+
 // Generated-patch metadata (from patch:proposed / patch:applied). Byte/file counts always; the
 // diff itself ONLY under the includeDiff opt-in, and ALWAYS redacted (D2/D3).
 export interface EvidencePatch {
@@ -104,6 +127,73 @@ export interface EvidenceFailure {
   readonly message: string;
 }
 
+export type EvidenceTaskType = TaskType | "browser-capture" | "terminal-execution";
+
+export interface EvidenceBrowserViewportPx {
+  readonly width: number;
+  readonly height: number;
+}
+
+export type EvidenceBrowserEventType =
+  | "browser:session-opened"
+  | "browser:navigated"
+  | "browser:screenshot-captured"
+  | "browser:page-content-captured"
+  | "browser:session-closed"
+  | "browser:trust-warning"
+  | "browser:error";
+
+export interface EvidenceBrowserEvent {
+  readonly schemaVersion: "1";
+  readonly type: EvidenceBrowserEventType;
+  readonly sessionId: string;
+  readonly seq: number;
+  readonly ts: number;
+  readonly originOnly?: string | undefined;
+  readonly httpStatus?: number | null | undefined;
+  readonly captureSeq?: number | undefined;
+  readonly persisted?: boolean | undefined;
+  readonly viewportPx?: EvidenceBrowserViewportPx | undefined;
+  readonly path?: string | undefined;
+  readonly sha256?: string | undefined;
+  readonly bytes?: number | undefined;
+  readonly byteLength?: number | undefined;
+  readonly reason?: string | undefined;
+  readonly warning?: string | undefined;
+  readonly code?: string | undefined;
+  readonly message?: string | undefined;
+}
+
+export interface EvidenceBrowserScreenshot {
+  readonly seq: number;
+  readonly path: string;
+  readonly sha256: string;
+  readonly bytes: number;
+  readonly capturedAt: number;
+  readonly viewportPx: EvidenceBrowserViewportPx;
+}
+
+export interface EvidenceBrowserContentCapture {
+  readonly seq: number;
+  readonly byteLength: number;
+  readonly capturedAt: number;
+  readonly redactedHtml: string;
+}
+
+export interface EvidenceBrowserCapture {
+  readonly sessionId: string;
+  readonly cdpPort: number;
+  readonly targetId: string;
+  readonly status: "open" | "closed";
+  readonly startedAt: number;
+  readonly closedAt?: number | undefined;
+  readonly closeReason?: string | undefined;
+  readonly lastOriginOnly?: string | undefined;
+  readonly events: readonly EvidenceBrowserEvent[];
+  readonly screenshots?: readonly EvidenceBrowserScreenshot[] | undefined;
+  readonly contentCaptures?: readonly EvidenceBrowserContentCapture[] | undefined;
+}
+
 export interface EvidenceManifest {
   readonly evidenceSchemaVersion: "1";
   readonly run: EvidenceRunIdentity;
@@ -113,10 +203,13 @@ export interface EvidenceManifest {
   readonly stateTransitions: readonly EvidenceStateTransition[];
   readonly toolCalls: readonly EvidenceToolCall[];
   readonly commandExecutions: readonly EvidenceCommandExecution[];
+  readonly sandboxConfigurations?: readonly EvidenceSandboxConfiguration[] | undefined;
+  readonly verificationResults?: readonly EvidenceVerificationResult[] | undefined;
   readonly patch?: EvidencePatch | undefined;
   readonly verification?: VerificationAuditSummary | undefined;
   readonly failure?: EvidenceFailure | undefined;
   readonly reasoning?: readonly EvidenceReasoningEntry[] | undefined;
+  readonly browser?: EvidenceBrowserCapture | undefined;
 }
 
 // ─── Redaction config (D3) ──────────────────────────────────────────────────────

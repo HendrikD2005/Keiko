@@ -1,6 +1,6 @@
 {
-  "name": "keiko",
-  "version": "0.1.0",
+  "name": "@oscharko-dev/keiko",
+  "version": "0.1.0-beta.2",
   "description": "Enterprise model-agnostic developer-assist coding agent for regulated engineering workflows.",
   "type": "module",
   "license": "Apache-2.0",
@@ -20,7 +20,9 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE",
+    "TRADEMARKS.md"
   ],
   "sideEffects": false,
   "scripts": {
@@ -31,21 +33,26 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "ui:ci": "npm --prefix ui ci --ignore-scripts",
     "build:ui": "node scripts/build-ui.mjs",
     "check:package-surface": "node scripts/check-package-surface.mjs",
-    "prepack": "npm run build && npm run build:ui && npm run check:package-surface",
-    "prepublishOnly": "npm run build && npm run build:ui && npm run check:package-surface",
+    "prepack": "npm run clean && npm run build && npm run ui:ci && npm run build:ui && npm run check:package-surface",
+    "prepublishOnly": "npm run clean && npm run build && npm run ui:ci && npm run build:ui && npm run check:package-surface",
     "clean": "rm -rf dist coverage"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "@types/node": "^22.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^9.0.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.0.0",
-    "typescript": "^5.5.0",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^4.1.7",
-    "@vitest/coverage-v8": "^4.1.7"
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
   }
 }

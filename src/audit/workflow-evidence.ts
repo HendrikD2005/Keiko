@@ -8,16 +8,14 @@
 // `WorkflowRunKind` / `WorkflowTerminalStatus` so it never depends on src/ui types. The UI
 // re-exports it (behaviour-preserving); the evaluation runner imports it directly.
 //
-// Persistence is BEST-EFFORT: a failure anywhere (a malformed report, a redactor error, an fs error)
-// is swallowed so the run outcome already recorded by the caller stands. Nothing is logged, so no
-// secret can leak through a log line.
-
+import { buildEvidenceReport, type EvidenceReport } from "./report.js";
 import { resolveCostClass } from "./aggregate.js";
 import { createAuditRedactor, deepRedactStrings } from "./redaction.js";
 import { EVIDENCE_SCHEMA_VERSION, type EvidenceManifest } from "./types.js";
 import type { EvidenceStore } from "./store.js";
 import { HARNESS_VERSION, type TaskType } from "../harness/index.js";
 import type { EnvSource } from "../gateway/index.js";
+import type { AuditSummary } from "../workspace/index.js";
 
 // The two workflow families the evidence path serves. Distinct from the UI RunKind (which also
 // carries "explain-plan", handled by a separate harness-usage fold) so this module needs no ui import.
@@ -29,6 +27,7 @@ export type WorkflowTerminalStatus = "completed" | "cancelled" | "failed";
 export interface EvidencePersistContext {
   readonly store: EvidenceStore;
   readonly env: EnvSource;
+  readonly additionalSecrets?: readonly string[] | undefined;
 }
 
 // Identity + timing held when a workflow run terminates. `modelId` is the request model; the
@@ -41,6 +40,7 @@ export interface WorkflowRunIdentity {
   readonly status: WorkflowTerminalStatus;
   readonly startedAt: number;
   readonly finishedAt: number;
+  readonly workspaceRoot?: string | undefined;
 }
 
 // A structural workflow event: every workflow/harness event carries this envelope; the manifest fold
@@ -65,7 +65,10 @@ export function foldWorkflowUsage(
   let requestCount = 0;
   let totalLatencyMs = 0;
   for (const event of events) {
-    if (event.type !== "workflow:model:call:completed") {
+    if (
+      event.type !== "workflow:model:call:completed" &&
+      event.type !== "bug:model:call:completed"
+    ) {
       continue;
     }
     const record = event as unknown as Record<string, unknown>;
@@ -100,6 +103,9 @@ export function buildWorkflowManifest(
     },
     model: { modelId: identity.modelId, costClass: resolveCostClass(identity.modelId) },
     usageTotals: foldWorkflowUsage(events),
+    ...(contextOf(identity.workspaceRoot) === undefined
+      ? {}
+      : { context: contextOf(identity.workspaceRoot) }),
     stateTransitions: [],
     toolCalls: [],
     commandExecutions: [],
@@ -109,22 +115,34 @@ export function buildWorkflowManifest(
   };
 }
 
-// Builds, redacts, and writes the workflow manifest through the store. The WHOLE operation is
-// best-effort: a failure anywhere is swallowed so the caller's already-recorded outcome stands.
+function contextOf(workspaceRoot: string | undefined): AuditSummary | undefined {
+  if (workspaceRoot === undefined) {
+    return undefined;
+  }
+  return {
+    workspaceRoot,
+    totalCandidates: 0,
+    usedBytes: 0,
+    budgetBytes: 0,
+    droppedForBudget: 0,
+    entries: [],
+  };
+}
+
+// Builds, redacts, writes the workflow manifest through the store, and returns the structured
+// EvidenceReport. Errors intentionally surface to the caller so UI/evaluation paths cannot silently
+// claim a terminal run without a durable evidence artifact.
 export function persistWorkflowEvidence(
   identity: WorkflowRunIdentity,
   report: unknown,
   events: readonly WorkflowEventLike[],
   ctx: EvidencePersistContext,
-): void {
-  try {
-    const manifest = buildWorkflowManifest(identity, events, report);
-    const redactor = createAuditRedactor({}, ctx.env);
-    const redacted = deepRedactStrings(manifest, redactor) as EvidenceManifest;
-    ctx.store.put(redacted.run.runId, JSON.stringify(redacted));
-  } catch {
-    // Best-effort: a persist failure must not surface to the caller (AC5 / coordinator guardrail).
-  }
+): EvidenceReport {
+  const manifest = buildWorkflowManifest(identity, events, report);
+  const redactor = createAuditRedactor({ additionalSecrets: ctx.additionalSecrets ?? [] }, ctx.env);
+  const redacted = deepRedactStrings(manifest, redactor) as EvidenceManifest;
+  const location = ctx.store.put(redacted.run.runId, JSON.stringify(redacted));
+  return buildEvidenceReport(redacted, location);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,8 +155,13 @@ function verificationOf(report: unknown): EvidenceManifest["verification"] {
   if (!isRecord(report)) {
     return undefined;
   }
-  const summary = report.verificationSummary;
+  const summary = report.verificationSummary ?? verifiedVerificationOf(report);
   return isRecord(summary) ? (summary as unknown as EvidenceManifest["verification"]) : undefined;
+}
+
+function verifiedVerificationOf(report: Record<string, unknown>): unknown {
+  const verified = report.verified;
+  return isRecord(verified) ? verified.verification : undefined;
 }
 
 // Builds patch metadata (counts/bytes only, never the raw diff) from a workflow report. unit-tests
@@ -155,13 +178,21 @@ function patchOf(report: unknown): EvidenceManifest["patch"] {
   }
   return {
     proposed,
-    applied: report.status === "fix-applied",
+    applied: patchApplied(report),
     targetFileCount: changedFiles,
     patchBytes: typeof proposedDiff === "string" ? Buffer.byteLength(proposedDiff, "utf8") : 0,
     changedFiles,
     created: 0,
     deleted: 0,
   };
+}
+
+function patchApplied(report: Record<string, unknown>): boolean {
+  if (report.status === "completed" || report.status === "fix-applied") {
+    return true;
+  }
+  const verified = report.verified;
+  return isRecord(verified) && verified.patchApplied === true;
 }
 
 function changedFileCount(report: Record<string, unknown>): number {

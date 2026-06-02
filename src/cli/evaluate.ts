@@ -25,7 +25,7 @@ import type { CliIo } from "./runner.js";
 
 const USAGE = `Usage:
   keiko evaluate [--suite <unit-tests|bug-investigation|all>] [--fixture <name>]
-                 [--live] [--model <id>] [--json] [--output <path>]
+                 [--live] [--model <id>] [--config PATH] [--json] [--output <path>]
 
 Runs the evaluation harness against the built-in fixtures. Offline by default
 (deterministic, no network); pass --live to evaluate against a configured model.
@@ -41,6 +41,7 @@ interface EvaluateArgs {
   readonly fixture: string | undefined;
   readonly live: boolean;
   readonly model: string | undefined;
+  readonly config: string | undefined;
   readonly json: boolean;
   readonly output: string | undefined;
 }
@@ -54,8 +55,9 @@ function flagValue(args: readonly string[], name: string): string | undefined | 
   return value === undefined || value.startsWith("--") ? null : value;
 }
 
-const VALUE_FLAGS = ["--suite", "--fixture", "--model", "--output"] as const;
+const VALUE_FLAGS = ["--suite", "--fixture", "--model", "--config", "--output"] as const;
 type ValueFlag = (typeof VALUE_FLAGS)[number];
+const BOOLEAN_FLAGS = ["--live", "--json"] as const;
 
 function readValueFlags(args: readonly string[]): Record<ValueFlag, string | undefined> | null {
   const values = {} as Record<ValueFlag, string | undefined>;
@@ -69,6 +71,36 @@ function readValueFlags(args: readonly string[]): Record<ValueFlag, string | und
   return values;
 }
 
+function isValueFlag(value: string): value is ValueFlag {
+  return (VALUE_FLAGS as readonly string[]).includes(value);
+}
+
+function isBooleanFlag(value: string): boolean {
+  return (BOOLEAN_FLAGS as readonly string[]).includes(value);
+}
+
+function findUsageError(args: readonly string[]): string | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) {
+      continue;
+    }
+    if (isValueFlag(arg)) {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith("--")) {
+        return `missing value for ${arg}`;
+      }
+      i += 1;
+      continue;
+    }
+    if (isBooleanFlag(arg)) {
+      continue;
+    }
+    return arg.startsWith("--") ? `unknown flag ${arg}` : `unexpected argument ${arg}`;
+  }
+  return undefined;
+}
+
 function parseArgs(args: readonly string[]): EvaluateArgs | null {
   const values = readValueFlags(args);
   if (values === null) {
@@ -79,6 +111,7 @@ function parseArgs(args: readonly string[]): EvaluateArgs | null {
     fixture: values["--fixture"],
     live: args.includes("--live"),
     model: values["--model"],
+    config: values["--config"],
     json: args.includes("--json"),
     output: values["--output"],
   };
@@ -113,14 +146,35 @@ function redactedScorecard(scorecard: EvalScorecard, live: boolean, env: EnvSour
   if (!live) {
     return scorecard;
   }
-  const redactFn = createAuditRedactor({ additionalSecrets: [] }, env);
+  const redactFn = createAuditRedactor({ additionalSecrets: keikoApiKeySecrets(env) }, env);
   return deepRedactStrings(scorecard, redactFn);
+}
+
+function isKeikoApiKeyEnvName(name: string): boolean {
+  return (
+    name === "KEIKO_DEFAULT_API_KEY" ||
+    (name.startsWith("KEIKO_MODEL_") && name.endsWith("_API_KEY"))
+  );
+}
+
+function keikoApiKeySecrets(env: EnvSource): readonly string[] {
+  const secrets: string[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    if (value !== undefined && isKeikoApiKeyEnvName(name)) {
+      secrets.push(value);
+    }
+  }
+  return secrets;
+}
+
+function writeScorecard(path: string, output: unknown): void {
+  writeFileSync(path, `${JSON.stringify(output, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
 }
 
 function emit(scorecard: EvalScorecard, parsed: EvaluateArgs, io: CliIo, env: EnvSource): void {
   const output = redactedScorecard(scorecard, parsed.live, env);
   if (parsed.output !== undefined) {
-    writeFileSync(parsed.output, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+    writeScorecard(parsed.output, output);
   }
   if (parsed.json) {
     io.out(`${JSON.stringify(output, null, 2)}\n`);
@@ -146,6 +200,11 @@ export async function runEvaluateCli(
   if (args.includes("--help")) {
     io.out(USAGE);
     return 0;
+  }
+  const usageError = findUsageError(args);
+  if (usageError !== undefined) {
+    io.err(`Error: ${usageError}.\n${USAGE}`);
+    return 2;
   }
   const parsed = parseArgs(args);
   if (parsed === null) {
@@ -173,6 +232,7 @@ async function runSuite(
         mode: parsed.live ? "live" : "offline",
         fixtures,
         ...(parsed.model === undefined ? {} : { modelIdOverride: parsed.model }),
+        ...(parsed.config === undefined ? {} : { configPath: parsed.config }),
       },
       // Provide Date.now as the default wall-clock so a real `keiko evaluate` prints the actual
       // current time. Tests override this via deps.runner.now for deterministic evaluatedAt.
@@ -181,8 +241,21 @@ async function runSuite(
     emit(scorecard, parsed, io, env);
     return exitCodeFor(scorecard);
   } catch (error) {
+    if (isOutputAlreadyExistsError(error)) {
+      io.err(`Error: output file already exists: ${parsed.output ?? "<unknown>"}\n`);
+      return 1;
+    }
     return handleRunError(error, parsed, io);
   }
+}
+
+function isOutputAlreadyExistsError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "EEXIST"
+  );
 }
 
 // Live-mode fail-closed: a GatewayError (incl. ConfigInvalidError) means no resolvable config or
@@ -192,8 +265,8 @@ function handleRunError(error: unknown, parsed: EvaluateArgs, io: CliIo): number
     io.err(
       `Error: model gateway configuration problem — ${redact(error.message)}\n` +
         (parsed.live
-          ? "Live evaluation requires a configured provider. Provide keiko.config.json or set " +
-            "KEIKO_DEFAULT_API_KEY and KEIKO_DEFAULT_BASE_URL.\n"
+          ? "Live evaluation requires a configured provider. Pass --config PATH or set " +
+            "KEIKO_CONFIG_FILE.\n"
           : ""),
     );
     return 1;
