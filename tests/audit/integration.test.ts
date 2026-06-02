@@ -48,11 +48,13 @@ function buildInput(runId: string, finishedAt: number): EvidenceBuildInput {
   const manifest: RunManifest = {
     runId,
     fingerprint: FP,
-    harnessVersion: "0.1.0",
+    harnessVersion: "0.1.0-beta.2",
     taskType: "explain-plan",
     taskInput,
     limits: DEFAULT_LIMITS,
     modelId: "m1",
+    workingDirectory: "/repo",
+    dryRun: true,
     startedAt: "2026-05-29T00:00:00.000Z",
     events: evs,
   };

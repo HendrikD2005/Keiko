@@ -10,7 +10,7 @@ function manifestFixture(runId: string, startedAt: number): EvidenceManifest {
     run: {
       runId,
       fingerprint: "fp",
-      harnessVersion: "0.1.0",
+      harnessVersion: "0.1.0-beta.2",
       taskType: "explain-plan",
       outcome: "completed",
       startedAt,
@@ -42,11 +42,56 @@ describe("listEvidence", () => {
       outcome: "completed",
       startedAt: 100,
       finishedAt: 110,
+      modelId: "m1",
     });
   });
 
   it("returns an empty list for an empty store", () => {
     expect(listEvidence(createInMemoryEvidenceStore())).toEqual([]);
+  });
+
+  it("lists additive browser capture manifests", () => {
+    const store = createInMemoryEvidenceStore();
+    store.put(
+      "browser-run",
+      JSON.stringify({
+        ...manifestFixture("browser-run", 300),
+        run: {
+          ...manifestFixture("browser-run", 300).run,
+          taskType: "browser-capture",
+        },
+        model: { modelId: "browser-tool", costClass: "unknown" },
+        usageTotals: {
+          promptTokens: 0,
+          completionTokens: 0,
+          requestCount: 0,
+          totalLatencyMs: 0,
+        },
+        browser: {
+          sessionId: "session-1",
+          cdpPort: 9222,
+          targetId: "TARGET-1",
+          status: "closed",
+          startedAt: 300,
+          closedAt: 310,
+          closeReason: "explicit",
+          events: [
+            {
+              schemaVersion: "1",
+              type: "browser:session-opened",
+              sessionId: "session-1",
+              seq: 1,
+              ts: 300,
+            },
+          ],
+        },
+      } satisfies EvidenceManifest),
+    );
+    expect(listEvidence(store)[0]).toMatchObject({
+      runId: "browser-run",
+      taskType: "browser-capture",
+      modelId: "browser-tool",
+    });
   });
 });
 
@@ -72,6 +117,12 @@ describe("loadEvidence", () => {
     expect(() => loadEvidence(store, "run-x")).toThrow(EvidenceSchemaError);
   });
 
+  it("raises EvidenceSchemaError when a version-1 manifest lacks required fields", () => {
+    const store = createInMemoryEvidenceStore();
+    store.put("run-x", JSON.stringify({ evidenceSchemaVersion: "1" }));
+    expect(() => loadEvidence(store, "run-x")).toThrow(EvidenceSchemaError);
+  });
+
   it("raises a typed EvidenceReadError (not a raw SyntaxError) for malformed JSON (C1)", () => {
     const store = createInMemoryEvidenceStore();
     store.put("run-x", '{"evidenceSchemaVersion": "1", run');
@@ -82,5 +133,11 @@ describe("loadEvidence", () => {
     const store = createInMemoryEvidenceStore();
     store.put("run-x", "not json at all");
     expect(() => listEvidence(store)).toThrow(EvidenceReadError);
+  });
+
+  it("propagates a typed schema error through listEvidence too", () => {
+    const store = createInMemoryEvidenceStore();
+    store.put("run-x", JSON.stringify({ evidenceSchemaVersion: "1" }));
+    expect(() => listEvidence(store)).toThrow(EvidenceSchemaError);
   });
 });

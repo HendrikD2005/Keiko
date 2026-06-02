@@ -6,7 +6,12 @@
 //   - recursion is capped by maxDepth and total results by maxFiles.
 
 import { relative } from "node:path";
-import { nodeWorkspaceFs, type WorkspaceDirEntry, type WorkspaceFs } from "./fs.js";
+import {
+  nodeWorkspaceFs,
+  type WorkspaceDirEntry,
+  type WorkspaceFs,
+  type WorkspaceStat,
+} from "./fs.js";
 import { compileIgnore, isDenied, isIgnored, type IgnoreMatcher } from "./ignore.js";
 import { resolveWithinWorkspace } from "./paths.js";
 import { assertContainedRealPath } from "./realpath.js";
@@ -40,6 +45,14 @@ export interface DiscoveryResult {
 
 function toRelative(root: string, absolutePath: string): string {
   return relative(root, absolutePath).split("\\").join("/");
+}
+
+function toRealRelative(fs: WorkspaceFs, root: string, absolutePath: string): string {
+  try {
+    return toRelative(fs.realPath(root), absolutePath);
+  } catch {
+    return toRelative(root, absolutePath);
+  }
 }
 
 // Returns false when the entry must be skipped for any security or noise reason, recording
@@ -158,11 +171,20 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : "unknown error";
 }
 
-function statBytes(fs: WorkspaceFs, absolutePath: string, relPath: string): number {
+function statFile(fs: WorkspaceFs, absolutePath: string, relPath: string): WorkspaceStat {
   try {
-    return fs.stat(absolutePath).size;
+    return fs.stat(absolutePath);
   } catch (error) {
     throw new WorkspaceReadError(`cannot stat file: ${relPath} (${describe(error)})`, relPath);
+  }
+}
+
+function assertNoHardLinkAlias(stats: WorkspaceStat, relPath: string): void {
+  if (stats.hardLinkCount !== undefined && stats.hardLinkCount > 1) {
+    throw new PathDeniedError(
+      `refusing to read a hard-linked workspace alias: ${relPath}`,
+      relPath,
+    );
   }
 }
 
@@ -202,12 +224,17 @@ export function readWorkspaceFile(
     throw new PathDeniedError(`refusing to read a denied path: ${normalizedRel}`, normalizedRel);
   }
   const resolvedPath = assertContainedRealPath(fs, workspace.root, absolutePath, normalizedRel);
-  const size = statBytes(fs, resolvedPath, normalizedRel);
-  if (size > opts.maxBytes) {
+  const resolvedRel = toRealRelative(fs, workspace.root, resolvedPath);
+  if (isDenied(resolvedRel)) {
+    throw new PathDeniedError(`refusing to read a denied path: ${normalizedRel}`, normalizedRel);
+  }
+  const stats = statFile(fs, resolvedPath, normalizedRel);
+  assertNoHardLinkAlias(stats, normalizedRel);
+  if (stats.size > opts.maxBytes) {
     throw new FileTooLargeError(
       `file exceeds the read cap: ${normalizedRel}`,
       normalizedRel,
-      size,
+      stats.size,
       opts.maxBytes,
     );
   }

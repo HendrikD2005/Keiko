@@ -68,6 +68,16 @@ function fullEventMix(): readonly HarnessEvent[] {
     },
     {
       ...base(6, 160),
+      type: "sandbox:configured",
+      envAllowlist: ["PATH", "TZ"],
+      network: "inherit",
+      maxOutputBytes: 1_048_576,
+      timeoutMs: 30_000,
+      terminationGraceMs: 2_000,
+      cwdRequested: true,
+    },
+    {
+      ...base(7, 165),
       type: "command:executed",
       executable: "node",
       argCount: 2,
@@ -76,21 +86,27 @@ function fullEventMix(): readonly HarnessEvent[] {
       durationMs: 40,
     },
     {
-      ...base(7, 170),
+      ...base(8, 170),
       type: "patch:proposed",
       targetFile: "src/x.ts",
       patchBytes: 64,
       diff: `--- a\n+++ b\n+const k = "${GITHUB}";`,
     },
-    { ...base(8, 180), type: "patch:applied", changedFiles: 1, created: 0, deleted: 0 },
+    { ...base(9, 180), type: "patch:applied", changedFiles: 1, created: 0, deleted: 0 },
     {
-      ...base(9, 190),
+      ...base(10, 190),
+      type: "verification:result",
+      passed: true,
+      detail: `verified ${GITHUB}`,
+    },
+    {
+      ...base(11, 195),
       type: "reasoning:trace",
       phase: "planning",
       rationale: `mentions ${ENV_SECRET}`,
       modelResponse: "ok",
     },
-    { ...base(10, 200), type: "run:completed", report: "done" },
+    { ...base(12, 200), type: "run:completed", report: "done" },
   ];
 }
 
@@ -113,11 +129,13 @@ function makeManifest(events: readonly HarnessEvent[]): RunManifest {
   return {
     runId: RUN_ID,
     fingerprint: FP,
-    harnessVersion: "0.1.0",
+    harnessVersion: "0.1.0-beta.2",
     taskType: "investigate-bug",
     taskInput,
     limits,
     modelId: "m1",
+    workingDirectory: "/repo",
+    dryRun: true,
     startedAt: "2026-05-29T00:00:00.000Z",
     events,
   };
@@ -138,7 +156,7 @@ describe("buildEvidenceManifest — full event mix mapping", () => {
     expect(manifest.run).toMatchObject({
       runId: RUN_ID,
       fingerprint: FP,
-      harnessVersion: "0.1.0",
+      harnessVersion: "0.1.0-beta.2",
       taskType: "investigate-bug",
       outcome: "completed",
       startedAt: 100,
@@ -190,6 +208,20 @@ describe("buildEvidenceManifest — full event mix mapping", () => {
     });
   });
 
+  it("maps sandbox configurations with names and limits only", () => {
+    expect(manifest.sandboxConfigurations).toHaveLength(1);
+    expect(manifest.sandboxConfigurations?.[0]).toMatchObject({
+      seq: 6,
+      envAllowlist: ["PATH", "TZ"],
+      network: "inherit",
+      maxOutputBytes: 1_048_576,
+      timeoutMs: 30_000,
+      terminationGraceMs: 2_000,
+      cwdRequested: true,
+    });
+    expect(JSON.stringify(manifest.sandboxConfigurations)).not.toContain(ENV_SECRET);
+  });
+
   it("maps patch counts and excludes the diff by default", () => {
     expect(manifest.patch).toMatchObject({
       proposed: true,
@@ -199,6 +231,15 @@ describe("buildEvidenceManifest — full event mix mapping", () => {
       changedFiles: 1,
     });
     expect(manifest.patch?.redactedDiff).toBeUndefined();
+  });
+
+  it("maps verification results and redacts their detail", () => {
+    expect(manifest.verificationResults).toHaveLength(1);
+    expect(manifest.verificationResults?.[0]).toMatchObject({
+      seq: 10,
+      passed: true,
+    });
+    expect(manifest.verificationResults?.[0]?.detail).not.toContain(GITHUB);
   });
 
   it("omits reasoning by default", () => {
@@ -226,6 +267,8 @@ describe("buildEvidenceManifest — absent sections are undefined", () => {
     expect(m.reasoning).toBeUndefined();
     expect(m.toolCalls).toEqual([]);
     expect(m.commandExecutions).toEqual([]);
+    expect(m.sandboxConfigurations).toBeUndefined();
+    expect(m.verificationResults).toBeUndefined();
     expect(m.stateTransitions).toEqual([]);
   });
 });
@@ -251,7 +294,7 @@ describe("buildEvidenceManifest — opt-ins", () => {
       { env },
     );
     expect(m.reasoning).toHaveLength(1);
-    expect(m.reasoning?.[0]?.seq).toBe(9);
+    expect(m.reasoning?.[0]?.seq).toBe(11);
     expect(m.reasoning?.[0]?.rationale).not.toContain(ENV_SECRET);
     expect(m.reasoning?.[0]?.rationale).toContain("[REDACTED]");
   });

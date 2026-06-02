@@ -1,5 +1,5 @@
 // Retrieval seam (ADR-0005 D5). `RetrievalStrategy` is the typed extension point a future
-// embedding ranker (e.g. `multilingual-e5-large`) plugs into. Wave-1 ships ONLY the seam and
+// embedding ranker (e.g. `example-embedding-model`) plugs into. Wave-1 ships ONLY the seam and
 // a deterministic lexical default — no embeddings, no vector DB, no new dependency. The
 // default ranker is pure and clock/RNG-free so context packs are reproducible.
 

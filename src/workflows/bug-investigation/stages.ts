@@ -6,8 +6,14 @@
 // selects the branch; emitCompleted stamps the terminal event. All redaction is inside assembleBugReport.
 
 import { redact } from "../../gateway/redaction.js";
-import { applyPatch, renderDryRun, type PatchApplyResult } from "../../tools/index.js";
-import { nodeWorkspaceFs, type WorkspaceInfo } from "../../workspace/index.js";
+import {
+  applyPatch,
+  CommandCancelledError,
+  renderDryRun,
+  type PatchApplyResult,
+} from "../../tools/index.js";
+import { nodeWorkspaceFs } from "../../workspace/fs.js";
+import type { WorkspaceInfo } from "../../workspace/index.js";
 import { assembleBugReport } from "./report.js";
 import { runBugVerification } from "./verify-stage.js";
 import {
@@ -53,6 +59,7 @@ export function rejectedReport(
     nextActions: [
       `The model did not produce an in-scope fix (${loop.lastRejectionCode ?? "insufficient evidence"})`,
     ],
+    failureReason: undefined,
     modelCallCount: loop.modelCallCount,
     patchRetryCount: loop.patchRetryCount,
   });
@@ -76,6 +83,7 @@ export function insufficientInputReport(state: BugRunState): BugInvestigationRep
     nextActions: [
       "Provide at least one of: a description, failing output, a stack trace, or suspected target files",
     ],
+    failureReason: undefined,
     modelCallCount: 0,
     patchRetryCount: 0,
   });
@@ -101,6 +109,7 @@ export function investigationOnlyReport(
     dryRunPreview: undefined,
     verificationSkipReason: "verification skipped: no patch produced (investigation-only)",
     nextActions: investigationNextActions(),
+    failureReason: undefined,
     modelCallCount: loop.modelCallCount,
     patchRetryCount: loop.patchRetryCount,
   });
@@ -127,6 +136,7 @@ export function dryRunReport(
     dryRunPreview: renderDryRun(accepted.validation),
     verificationSkipReason: "verification skipped: dry-run, no files written",
     nextActions: nextActionsFor(false, files, elevatedPaths(accepted)),
+    failureReason: undefined,
     modelCallCount: loop.modelCallCount,
     patchRetryCount: loop.patchRetryCount,
   });
@@ -163,6 +173,7 @@ export function cancelledReport(
     dryRunPreview: accepted === undefined ? undefined : renderDryRun(accepted.validation),
     verificationSkipReason: "verification skipped: cancelled",
     nextActions,
+    failureReason: undefined,
     modelCallCount: loop.modelCallCount,
     patchRetryCount: loop.patchRetryCount,
   });
@@ -185,10 +196,27 @@ export function failedReport(state: BugRunState, error: unknown): BugInvestigati
     proposedDiff: undefined,
     dryRunPreview: undefined,
     verificationSkipReason: undefined,
-    nextActions: ["Inspect the error and retry"],
-    modelCallCount: 0,
-    patchRetryCount: 0,
+    nextActions: [`Inspect the error and retry: ${message}`],
+    failureReason: message,
+    modelCallCount: state.progress.modelCallCount,
+    patchRetryCount: state.progress.patchRetryCount,
   });
+}
+
+function applyBugPatch(
+  state: BugRunState,
+  workspace: WorkspaceInfo,
+  accepted: AcceptedBugPatch,
+): { readonly fs: typeof nodeWorkspaceFs; readonly applyResult: PatchApplyResult } {
+  const fs = state.deps.fs ?? nodeWorkspaceFs;
+  const applyResult = applyPatch(workspace, accepted.diff, {
+    applyEnabled: true,
+    signal: state.signal,
+    fs,
+    limits: patchLimitsFrom(state.limits),
+    ...(state.deps.writer === undefined ? {} : { writer: state.deps.writer }),
+  });
+  return { fs, applyResult };
 }
 
 async function applyAndVerify(
@@ -198,14 +226,16 @@ async function applyAndVerify(
   accepted: AcceptedBugPatch,
   evidence: FailureEvidence,
 ): Promise<BugInvestigationReport> {
-  const fs = state.deps.fs ?? nodeWorkspaceFs;
-  const applyResult: PatchApplyResult = applyPatch(workspace, accepted.diff, {
-    applyEnabled: true,
-    signal: state.signal,
-    fs,
-    limits: patchLimitsFrom(state.limits),
-    ...(state.deps.writer === undefined ? {} : { writer: state.deps.writer }),
-  });
+  let applyResult: PatchApplyResult;
+  let fs: typeof nodeWorkspaceFs;
+  try {
+    ({ fs, applyResult } = applyBugPatch(state, workspace, accepted));
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      return cancelledReport(state, loop, accepted, evidence);
+    }
+    throw error;
+  }
   state.emitter.emit({
     type: "bug:patch:applied",
     changedFiles: applyResult.changedFiles.length,
@@ -234,6 +264,7 @@ async function applyAndVerify(
     dryRunPreview: renderDryRun(accepted.validation),
     verificationSkipReason: verification.skipReason,
     nextActions: nextActionsFor(true, applyResult.changedFiles, elevatedPaths(accepted)),
+    failureReason: undefined,
     modelCallCount: loop.modelCallCount,
     patchRetryCount: loop.patchRetryCount,
   });

@@ -5,8 +5,14 @@
 // terminal event. All prose/diff redaction happens inside assembleReport.
 
 import { redact } from "../../gateway/redaction.js";
-import { applyPatch, renderDryRun, type PatchApplyResult } from "../../tools/index.js";
-import { nodeWorkspaceFs, type WorkspaceInfo } from "../../workspace/index.js";
+import {
+  applyPatch,
+  CommandCancelledError,
+  renderDryRun,
+  type PatchApplyResult,
+} from "../../tools/index.js";
+import { nodeWorkspaceFs } from "../../workspace/fs.js";
+import type { WorkspaceInfo } from "../../workspace/index.js";
 import { assembleReport } from "./report.js";
 import { runWorkflowVerification } from "./verify-stage.js";
 import {
@@ -30,6 +36,7 @@ export function rejectedReport(state: RunState, loop: ModelLoopResult): UnitTest
     nextActions: [
       `The model did not produce an in-scope test patch (${loop.lastRejectionCode ?? "unknown"})`,
     ],
+    failureReason: undefined,
     verificationSummary: undefined,
     verificationSkipReason: undefined,
     modelCallCount: loop.modelCallCount,
@@ -53,6 +60,7 @@ export function dryRunReport(
     coveredBehavior: accepted.coveredBehavior,
     knownGaps: accepted.knownGaps,
     nextActions: nextActionsFor(false, files),
+    failureReason: undefined,
     verificationSummary: undefined,
     verificationSkipReason: "verification skipped: dry-run, no files written",
     modelCallCount: loop.modelCallCount,
@@ -75,6 +83,7 @@ export function cancelledReport(
     coveredBehavior: undefined,
     knownGaps: undefined,
     nextActions: ["The workflow was cancelled before completion"],
+    failureReason: undefined,
     verificationSummary: undefined,
     verificationSkipReason: "verification skipped: cancelled",
     modelCallCount: loop.modelCallCount,
@@ -95,11 +104,12 @@ export function failedReport(state: RunState, error: unknown): UnitTestWorkflowR
     proposedDiff: undefined,
     coveredBehavior: undefined,
     knownGaps: undefined,
-    nextActions: ["Inspect the error and retry"],
+    nextActions: [`Inspect the error and retry: ${message}`],
+    failureReason: message,
     verificationSummary: undefined,
     verificationSkipReason: undefined,
-    modelCallCount: 0,
-    patchRetryCount: 0,
+    modelCallCount: state.progress.modelCallCount,
+    patchRetryCount: state.progress.patchRetryCount,
   });
 }
 
@@ -110,12 +120,20 @@ async function applyAndVerify(
   accepted: AcceptedPatch,
 ): Promise<UnitTestWorkflowReport> {
   const fs = state.deps.fs ?? nodeWorkspaceFs;
-  const applyResult: PatchApplyResult = applyPatch(workspace, accepted.diff, {
-    applyEnabled: true,
-    signal: state.signal,
-    fs,
-    ...(state.deps.writer === undefined ? {} : { writer: state.deps.writer }),
-  });
+  let applyResult: PatchApplyResult;
+  try {
+    applyResult = applyPatch(workspace, accepted.diff, {
+      applyEnabled: true,
+      signal: state.signal,
+      fs,
+      ...(state.deps.writer === undefined ? {} : { writer: state.deps.writer }),
+    });
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      return cancelledReport(state, loop, accepted);
+    }
+    throw error;
+  }
   state.emitter.emit({
     type: "workflow:patch:applied",
     changedFiles: applyResult.changedFiles.length,
@@ -136,6 +154,7 @@ async function applyAndVerify(
     coveredBehavior: accepted.coveredBehavior,
     knownGaps: accepted.knownGaps,
     nextActions: nextActionsFor(true, applyResult.changedFiles),
+    failureReason: undefined,
     verificationSummary: verification.summary,
     verificationSkipReason: verification.skipReason,
     modelCallCount: loop.modelCallCount,

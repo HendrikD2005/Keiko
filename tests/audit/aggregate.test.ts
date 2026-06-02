@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { aggregateUsage, resolveCostClass } from "../../src/audit/aggregate.js";
-import { CAPABILITY_REGISTRY } from "../../src/gateway/capabilities.js";
 import type { HarnessEvent } from "../../src/harness/types.js";
 
 function modelCompleted(
@@ -69,13 +68,8 @@ describe("aggregateUsage", () => {
 });
 
 describe("resolveCostClass", () => {
-  it("returns the registry costClass for a known model id", () => {
-    const known = CAPABILITY_REGISTRY[0];
-    expect(known).toBeDefined();
-    if (known === undefined) {
-      return;
-    }
-    expect(resolveCostClass(known.id)).toBe(known.costClass);
+  it("returns 'unknown' when no built-in registry model is shipped", () => {
+    expect(resolveCostClass("example-chat-model")).toBe("unknown");
   });
 
   it("returns 'unknown' for an unregistered model id", () => {
