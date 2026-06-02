@@ -21,6 +21,8 @@ export interface ManifestSeed {
   readonly taskInput: RunManifest["taskInput"];
   readonly limits: RunManifest["limits"];
   readonly modelId: string;
+  readonly workingDirectory: string;
+  readonly dryRun: boolean;
   readonly startedAt: string;
 }
 
@@ -59,6 +61,8 @@ const SUMMARISERS: {
   "tool:call:started": (e) => `tool=${e.toolName} id=${e.toolCallId}`,
   "tool:call:completed": (e) => `tool=${e.toolName} id=${e.toolCallId}`,
   "tool:call:failed": (e) => `tool=${e.toolName} code=${e.errorCode}`,
+  "sandbox:configured": (e) =>
+    `env=${e.envAllowlist.join(",")} network=${e.network} timeoutMs=${String(e.timeoutMs)} maxOutputBytes=${String(e.maxOutputBytes)} cwdRequested=${String(e.cwdRequested)}`,
   "command:executed": (e) =>
     `exec=${e.executable} args=${String(e.argCount)} exit=${String(e.exitCode)} timedOut=${String(e.timedOut)}`,
   "patch:applied": (e) =>
@@ -70,6 +74,18 @@ const SUMMARISERS: {
   "run:cancelled": (e) =>
     `cancelled at ${e.atState}${e.reason === undefined ? "" : ` (${e.reason})`}`,
   "run:failed": (e) => `${e.failure.category}: ${e.failure.message}`,
+  // ADR-0017 — browser-tool events. originOnly is the scheme+authority only; never a path/query.
+  "browser:session-opened": (e) =>
+    `session=${e.sessionId} port=${String(e.cdpPort)} target=${e.targetId}`,
+  "browser:navigated": (e) =>
+    `session=${e.sessionId} origin=${e.originOnly} status=${String(e.httpStatus)}`,
+  "browser:screenshot-captured": (e) =>
+    `session=${e.sessionId} seq=${String(e.captureSeq)} persisted=${String(e.persisted)}`,
+  "browser:page-content-captured": (e) =>
+    `session=${e.sessionId} seq=${String(e.captureSeq)} bytes=${String(e.byteLength)}`,
+  "browser:session-closed": (e) => `session=${e.sessionId} reason=${e.reason}`,
+  "browser:trust-warning": (e) => `session=${e.sessionId} warning=${e.warning}`,
+  "browser:error": (e) => `session=${e.sessionId} code=${e.code}`,
 };
 
 function summarise(event: HarnessEvent): string {

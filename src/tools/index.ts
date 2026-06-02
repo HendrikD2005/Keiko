@@ -60,6 +60,8 @@ export {
   runCommand,
   type RunCommandDeps,
   type RunCommandInput,
+  type ExecutableResolver,
+  type ExecutableResolverDeps,
   type SpawnFn,
   type SpawnOptions,
 } from "./exec.js";
@@ -72,6 +74,7 @@ export {
   type ValidateDeps,
 } from "./patch.js";
 
+export { normalizeUnifiedDiffHunks } from "./patch-normalize.js";
 export { parseUnifiedDiff, type ParsedPatch } from "./patch-parse.js";
 
 export { TOOL_DEFINITIONS } from "./schemas.js";

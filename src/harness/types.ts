@@ -59,7 +59,7 @@ export const DEFAULT_LIMITS: HarnessLimits = {
 
 // ─── Task types ───────────────────────────────────────────────────────────────
 
-export type TaskType = "generate-unit-tests" | "investigate-bug" | "explain-plan";
+export type TaskType = "generate-unit-tests" | "investigate-bug" | "explain-plan" | "verify";
 
 export interface GenerateUnitTestsInput {
   readonly filePath: string;
@@ -76,12 +76,23 @@ export interface InvestigateBugInput {
 export interface ExplainPlanInput {
   readonly filePath: string;
   readonly question?: string | undefined;
+  // Optional redacted file excerpt supplied by the BFF. The task remains read-only; this only
+  // grounds the model so it does not infer file contents from the path alone.
+  readonly context?: string | undefined;
+}
+
+// Verify task is deterministic: the run engine invokes the verification orchestrator directly
+// (no model loop), so this shape carries only the workspaceRoot and optional target file subset.
+export interface VerifyInput {
+  readonly workspaceRoot: string;
+  readonly targetFiles?: readonly string[] | undefined;
 }
 
 export type TaskInput =
   | { readonly taskType: "generate-unit-tests"; readonly input: GenerateUnitTestsInput }
   | { readonly taskType: "investigate-bug"; readonly input: InvestigateBugInput }
-  | { readonly taskType: "explain-plan"; readonly input: ExplainPlanInput };
+  | { readonly taskType: "explain-plan"; readonly input: ExplainPlanInput }
+  | { readonly taskType: "verify"; readonly input: VerifyInput };
 
 // ─── Runtime counters (harness-internal mutable state) ────────────────────────
 
@@ -91,6 +102,10 @@ export interface RunCounters {
   toolCalls: number;
   commandExecutions: number;
   failureAttempts: number;
+  // ADR-0017 D7 — reserved for future harness-integrated browser sessions. The MVP browser tool
+  // runs as a BFF surface (ADR-0017 D8/D9) and does not flow through the harness loop, so this
+  // field stays at 0 in MVP. Additive, never decremented. See ADR-0017 D7 + D11.
+  browserNavigations: number;
 }
 
 // ─── Run result ───────────────────────────────────────────────────────────────
@@ -120,6 +135,8 @@ export interface RunManifest {
   readonly taskInput: TaskInput;
   readonly limits: HarnessLimits;
   readonly modelId: string;
+  readonly workingDirectory: string;
+  readonly dryRun: boolean;
   readonly startedAt: string;
   readonly events: readonly HarnessEvent[];
 }
@@ -238,6 +255,19 @@ export interface CommandExecutedEvent extends BaseEvent {
   readonly durationMs: number;
 }
 
+// Redacted sandbox configuration snapshot used for the command. Names-only env allowlist,
+// documented network policy, limits, and whether a non-root cwd was requested. No env values,
+// command arguments, stdout/stderr, or paths.
+export interface SandboxConfiguredEvent extends BaseEvent {
+  readonly type: "sandbox:configured";
+  readonly envAllowlist: readonly string[];
+  readonly network: "inherit" | "none";
+  readonly maxOutputBytes: number;
+  readonly timeoutMs: number;
+  readonly terminationGraceMs: number;
+  readonly cwdRequested: boolean;
+}
+
 // S-M1: redacted audit record that a patch was APPLIED (issue #10 ledger). File COUNTS only —
 // never file paths, never file contents.
 export interface PatchAppliedEvent extends BaseEvent {
@@ -287,6 +317,79 @@ export interface RunFailedEvent extends BaseEvent {
   readonly atState: HarnessStateName;
 }
 
+// ─── Browser tool events (ADR-0017 D7) ───────────────────────────────────────
+//
+// These events live outside the harness state machine: the browser tool is a BFF-level surface,
+// not a workflow. The events share BaseEvent's schemaVersion+seq+ts shape so the existing SSE
+// framer and redactor can carry them without change. `originOnly` carries scheme + authority only
+// (never path/query/fragment) so a URL with a token in its querystring never appears in the event
+// stream.
+
+export type BrowserSessionCloseReason =
+  | "explicit"
+  | "process-exit"
+  | "chrome-disconnected"
+  | "idle-timeout";
+
+export interface BrowserSessionOpenedEvent extends BaseEvent {
+  readonly type: "browser:session-opened";
+  readonly sessionId: string;
+  readonly cdpPort: number;
+  readonly targetId: string;
+}
+
+export interface BrowserNavigatedEvent extends BaseEvent {
+  readonly type: "browser:navigated";
+  readonly sessionId: string;
+  readonly originOnly: string;
+  readonly httpStatus: number | null;
+}
+
+export interface BrowserScreenshotCapturedEvent extends BaseEvent {
+  readonly type: "browser:screenshot-captured";
+  readonly sessionId: string;
+  readonly captureSeq: number;
+  readonly persisted: boolean;
+  readonly viewportPx: { readonly width: number; readonly height: number };
+  // Present only on persisted=true. Relative to the per-run side-file directory.
+  readonly path?: string | undefined;
+}
+
+export interface BrowserPageContentCapturedEvent extends BaseEvent {
+  readonly type: "browser:page-content-captured";
+  readonly sessionId: string;
+  readonly captureSeq: number;
+  readonly byteLength: number;
+}
+
+export interface BrowserSessionClosedEvent extends BaseEvent {
+  readonly type: "browser:session-closed";
+  readonly sessionId: string;
+  readonly reason: BrowserSessionCloseReason;
+}
+
+export interface BrowserTrustWarningEvent extends BaseEvent {
+  readonly type: "browser:trust-warning";
+  readonly sessionId: string;
+  readonly warning: string;
+}
+
+export interface BrowserErrorEvent extends BaseEvent {
+  readonly type: "browser:error";
+  readonly sessionId: string;
+  readonly code: string;
+  readonly message: string;
+}
+
+export type BrowserEvent =
+  | BrowserSessionOpenedEvent
+  | BrowserNavigatedEvent
+  | BrowserScreenshotCapturedEvent
+  | BrowserPageContentCapturedEvent
+  | BrowserSessionClosedEvent
+  | BrowserTrustWarningEvent
+  | BrowserErrorEvent;
+
 export type HarnessEvent =
   | RunStartedEvent
   | StateTransitionEvent
@@ -297,10 +400,12 @@ export type HarnessEvent =
   | ToolCallCompletedEvent
   | ToolCallFailedEvent
   | CommandExecutedEvent
+  | SandboxConfiguredEvent
   | PatchAppliedEvent
   | ReasoningTraceEvent
   | PatchProposedEvent
   | VerificationResultEvent
   | RunCompletedEvent
   | RunCancelledEvent
-  | RunFailedEvent;
+  | RunFailedEvent
+  | BrowserEvent;
