@@ -143,6 +143,7 @@ jobs:
       - name: Build package and UI assets
         run: |
           npm run build
+          npm run prepare:bin
           npm run build:ui
       - name: Verify package surface
         run: npm run check:package-surface
