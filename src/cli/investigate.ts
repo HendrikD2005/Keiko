@@ -2,19 +2,25 @@
 // regression test (ADR-0009 D14). Dry-run by default; --apply writes the fix and runs verification.
 // The text path prints the proposed diff (when present) plus clearly-labelled verified facts and
 // the UNVERIFIED model hypothesis; --json emits the full BugInvestigationReport. Failing output and
-// stack traces may be read from files (--output-file / --stack-file) to avoid huge argv. The gateway
-// ModelPort is built from config (loadConfigFromFile); tests inject deps.model directly so no live
-// gateway is needed. Exit 0 on fix-applied/fix-proposed/investigation-only, 1 on
+// stack traces may be read from files (--output-file / --stack-file) to avoid huge argv. Evidence
+// files are read through the workspace boundary, never raw node:fs. The gateway ModelPort is built
+// from config (loadConfigFromFile); tests inject deps.model directly so no live gateway is needed.
+// Exit 0 on fix-applied/fix-proposed/investigation-only, 1 on
 // rejected/cancelled/failed/runtime, 2 on usage. Mirrors runGenTestsCli's structure.
 
-import { readFileSync } from "node:fs";
 import { Gateway } from "../gateway/gateway.js";
 import { loadConfigFromFile, type EnvSource } from "../gateway/config.js";
-import { GatewayError } from "../gateway/errors.js";
+import { ConfigInvalidError, GatewayError } from "../gateway/errors.js";
+import { assertConfiguredModel, selectConfiguredModel } from "../gateway/model-selection.js";
 import { redact } from "../gateway/redaction.js";
 import { GatewayModelPort } from "../harness/adapters.js";
 import type { ModelPort } from "../harness/ports.js";
-import { WorkspaceError } from "../workspace/index.js";
+import {
+  detectWorkspace,
+  readWorkspaceFile,
+  WorkspaceError,
+  type WorkspaceInfo,
+} from "../workspace/index.js";
 import { investigateBug, renderBugMarkdownReport } from "../workflows/index.js";
 import type {
   BugInvestigationReport,
@@ -22,12 +28,10 @@ import type {
 } from "../workflows/bug-investigation/types.js";
 import type { CliIo } from "./runner.js";
 
-const DEFAULT_CONFIG_PATH = "./keiko.config.json";
-
 const USAGE = `Usage:
   keiko investigate [--description TEXT] [--output TEXT | --output-file PATH]
                     [--stack TEXT | --stack-file PATH] [--file PATH[,PATH]]
-                    [--apply] [--model MODEL_ID] [--json] [--dir-root PATH]
+                    [--apply] [--model MODEL_ID] [--config PATH] [--json] [--dir-root PATH]
 
 Investigates a bounded bug report and proposes a root-cause hypothesis with a
 minimal fix and a regression test, separating verified facts from model
@@ -39,7 +43,7 @@ write the fix and run verification through the safe tool + verification layers.
 export interface InvestigateDeps {
   // Injected ModelPort for tests. When absent, a GatewayModelPort is built from config.
   readonly model?: ModelPort | undefined;
-  // Injected file reader for tests. Defaults to node:fs readFileSync (utf8).
+  // Injected file reader for tests. Production defaults to readWorkspaceFile.
   readonly readFile?: ((path: string) => string) | undefined;
 }
 
@@ -52,6 +56,7 @@ interface InvestigateArgs {
   readonly files: readonly string[] | undefined;
   readonly apply: boolean;
   readonly model: string | undefined;
+  readonly config: string | undefined;
   readonly json: boolean;
   readonly dirRoot: string;
 }
@@ -75,6 +80,7 @@ const VALUE_FLAGS = [
   "--stack-file",
   "--file",
   "--model",
+  "--config",
   "--dir-root",
 ] as const;
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -117,6 +123,7 @@ function parseArgs(args: readonly string[]): InvestigateArgs | null {
     files: parseFiles(values["--file"]),
     apply: args.includes("--apply"),
     model: values["--model"],
+    config: values["--config"],
     json: args.includes("--json"),
     dirRoot: values["--dir-root"] ?? ".",
   };
@@ -152,16 +159,33 @@ function resolveReport(
   };
 }
 
+function workspaceEvidenceReader(workspace: WorkspaceInfo): (path: string) => string {
+  return (path: string): string => readWorkspaceFile(workspace, path).text;
+}
+
 function buildModel(
   parsed: InvestigateArgs,
   io: CliIo,
   env: EnvSource,
 ): { port: ModelPort; modelId: string } | number {
   try {
-    const config = loadConfigFromFile(DEFAULT_CONFIG_PATH, env);
-    const modelId = parsed.model ?? config.providers[0]?.modelId;
+    const path = parsed.config ?? env.KEIKO_CONFIG_FILE;
+    if (path === undefined) {
+      throw new ConfigInvalidError("no config source; pass --config PATH or set KEIKO_CONFIG_FILE");
+    }
+    const config = loadConfigFromFile(path, env);
+    if (parsed.model !== undefined) {
+      assertConfiguredModel(config, parsed.model);
+    }
+    const modelId =
+      parsed.model ??
+      selectConfiguredModel(config, {
+        kind: "chat",
+        toolCalling: true,
+        structuredOutput: true,
+      });
     if (modelId === undefined) {
-      io.err("Error: no model provider configured.\n");
+      io.err("Error: no configured workflow-capable chat model is available.\n");
       return 1;
     }
     return { port: new GatewayModelPort(new Gateway(config)), modelId };
@@ -169,12 +193,29 @@ function buildModel(
     if (error instanceof GatewayError) {
       io.err(
         `Error: model gateway configuration problem — ${redact(error.message)}\n` +
-          `Provide a model via keiko.config.json or KEIKO_DEFAULT_API_KEY / KEIKO_DEFAULT_BASE_URL.\n`,
+          `Provide a gateway config with --config PATH or KEIKO_CONFIG_FILE.\n`,
       );
       return 1;
     }
     throw error;
   }
+}
+
+function resolveConfiguredModelId(parsed: InvestigateArgs, env: EnvSource): string | undefined {
+  const path = parsed.config ?? env.KEIKO_CONFIG_FILE;
+  if (path === undefined) {
+    return parsed.model ?? "default";
+  }
+  const config = loadConfigFromFile(path, env);
+  if (parsed.model !== undefined) {
+    assertConfiguredModel(config, parsed.model);
+    return parsed.model;
+  }
+  return selectConfiguredModel(config, {
+    kind: "chat",
+    toolCalling: true,
+    structuredOutput: true,
+  });
 }
 
 function resolveModel(
@@ -184,7 +225,20 @@ function resolveModel(
   deps: InvestigateDeps,
 ): { port: ModelPort; modelId: string } | number {
   if (deps.model !== undefined) {
-    return { port: deps.model, modelId: parsed.model ?? "default" };
+    try {
+      const modelId = resolveConfiguredModelId(parsed, env);
+      if (modelId === undefined) {
+        io.err("Error: no configured workflow-capable chat model is available.\n");
+        return 1;
+      }
+      return { port: deps.model, modelId };
+    } catch (error) {
+      if (error instanceof GatewayError) {
+        io.err(`Error: model gateway configuration problem — ${redact(error.message)}\n`);
+        return 1;
+      }
+      throw error;
+    }
   }
   return buildModel(parsed, io, env);
 }
@@ -242,11 +296,12 @@ export async function runInvestigateCli(
   if (typeof model === "number") {
     return model;
   }
-  const readFile = deps.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
   try {
+    const workspace = detectWorkspace(parsed.dirRoot);
+    const readFile = deps.readFile ?? workspaceEvidenceReader(workspace);
     const report = await investigateBug(
       {
-        workspaceRoot: parsed.dirRoot,
+        workspaceRoot: workspace.root,
         report: resolveReport(parsed, readFile),
         apply: parsed.apply,
         modelId: model.modelId,

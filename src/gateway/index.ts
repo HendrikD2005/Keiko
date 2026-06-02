@@ -27,6 +27,7 @@ export type {
 
 export {
   CAPABILITY_REGISTRY,
+  createDefaultChatCapability,
   findCapability,
   listCapabilities,
   selectCheapest,
@@ -45,6 +46,14 @@ export {
 export { Gateway, type GatewayDeps } from "./gateway.js";
 
 export { OpenAiAdapter, type AdapterDeps } from "./openai-adapter.js";
+
+export {
+  assertConfiguredModel,
+  findConfiguredCapability,
+  listConfiguredCapabilities,
+  selectConfiguredModel,
+  type ModelSelectionQuery,
+} from "./model-selection.js";
 
 export { CircuitBreaker, executeWithRetry, systemClock, type RetryConfig } from "./resilience.js";
 

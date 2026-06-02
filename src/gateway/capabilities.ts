@@ -24,6 +24,25 @@ export function listCapabilities(): readonly ModelCapability[] {
   return CAPABILITY_REGISTRY;
 }
 
+export function createDefaultChatCapability(modelId: string): ModelCapability {
+  return {
+    id: modelId,
+    kind: "chat",
+    contextWindow: 0,
+    maxOutputTokens: 0,
+    toolCalling: true,
+    structuredOutput: true,
+    streaming: true,
+    costClass: "medium",
+    latencyClass: "standard",
+    throughputHint: "runtime-configured endpoint",
+    preferredUseCases: ["Chat", "Agent workflow"],
+    knownLimitations: [
+      "Runtime-configured capability; validate against the target endpoint before production use",
+    ],
+  };
+}
+
 function matches(cap: ModelCapability, query: CapabilityQuery): boolean {
   if (query.kind !== undefined && cap.kind !== query.kind) {
     return false;

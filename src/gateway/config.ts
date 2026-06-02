@@ -5,7 +5,15 @@
 
 import { readFileSync } from "node:fs";
 import { ConfigInvalidError } from "./errors.js";
-import type { CircuitBreakerConfig, GatewayConfig, ModelProviderConfig } from "./types.js";
+import type {
+  CircuitBreakerConfig,
+  CostClass,
+  GatewayConfig,
+  LatencyClass,
+  ModelCapability,
+  ModelKind,
+  ModelProviderConfig,
+} from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -18,7 +26,6 @@ export type EnvSource = Readonly<Record<string, string | undefined>>;
 
 export interface SafeProviderConfig {
   readonly modelId: string;
-  readonly baseUrl: string;
   readonly timeoutMs: number;
   readonly maxRetries: number;
   readonly retryBaseDelayMs: number;
@@ -27,6 +34,7 @@ export interface SafeProviderConfig {
 export interface SafeGatewayConfig {
   readonly providers: readonly SafeProviderConfig[];
   readonly circuitBreaker: CircuitBreakerConfig;
+  readonly capabilities?: readonly ModelCapability[] | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,6 +55,54 @@ function requireNonEmptyString(value: unknown, path: string): string {
   return value;
 }
 
+function optionalStringArray(
+  value: unknown,
+  path: string,
+  fallback: readonly string[],
+): readonly string[] {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new ConfigInvalidError(`${path} must be an array of strings`);
+  }
+  return value as readonly string[];
+}
+
+function optionalNonNegativeInt(value: unknown, path: string, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new ConfigInvalidError(`${path} must be a non-negative integer`);
+  }
+  return value;
+}
+
+function optionalBoolean(value: unknown, path: string, fallback: boolean): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "boolean") {
+    throw new ConfigInvalidError(`${path} must be a boolean`);
+  }
+  return value;
+}
+
+function optionalNonEmptyString(value: unknown, path: string, fallback: string): string {
+  if (value === undefined) {
+    return fallback;
+  }
+  return requireNonEmptyString(value, path);
+}
+
+function requireEnum<T extends string>(value: unknown, path: string, allowed: readonly T[]): T {
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new ConfigInvalidError(`${path} must be one of ${allowed.join(", ")}`);
+  }
+  return value as T;
+}
+
 // Model id → KEIKO_MODEL_<UPPER>_ form: non-alphanumerics become "_", uppercased.
 function envModelToken(modelId: string): string {
   return modelId.replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
@@ -65,9 +121,18 @@ function resolveSecret(modelId: string, fileValue: string, env: EnvSource, suffi
 }
 
 // Validates a resolved baseUrl for scheme and credential hygiene. Host/IP is
-// intentionally NOT restricted: Keiko addresses customer-internally-hosted endpoints
+// intentionally NOT restricted: Keiko addresses private network endpoints
 // (private IPs are a valid, first-class target); this guard is scheme/credential
 // hygiene + defence-in-depth, not host filtering.
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hostname.startsWith("127.")
+  );
+}
+
 function validateBaseUrl(baseUrl: string, path: string): void {
   let url: URL;
   try {
@@ -78,6 +143,11 @@ function validateBaseUrl(baseUrl: string, path: string): void {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new ConfigInvalidError(`${path}.baseUrl must use the http or https scheme`);
   }
+  if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) {
+    throw new ConfigInvalidError(
+      `${path}.baseUrl must use https unless it targets localhost or loopback`,
+    );
+  }
   if (url.username !== "" || url.password !== "") {
     throw new ConfigInvalidError(
       `${path}.baseUrl must not embed credentials in the URL; provide the key via apiKey`,
@@ -85,12 +155,69 @@ function validateBaseUrl(baseUrl: string, path: string): void {
   }
 }
 
-function parseProvider(raw: unknown, index: number, env: EnvSource): ModelProviderConfig {
-  const path = `providers[${String(index)}]`;
+interface ParsedProvider {
+  readonly provider: ModelProviderConfig;
+  readonly capability?: ModelCapability | undefined;
+}
+
+interface ProviderConnection {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+}
+
+function parseProviderCapability(
+  raw: unknown,
+  path: string,
+  modelId: string,
+): ModelCapability | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
   if (!isRecord(raw)) {
     throw new ConfigInvalidError(`${path} must be an object`);
   }
-  const modelId = requireNonEmptyString(raw.modelId, `${path}.modelId`);
+  const id = optionalNonEmptyString(raw.id, `${path}.id`, modelId);
+  if (id !== modelId) {
+    throw new ConfigInvalidError(`${path}.id must match the provider modelId`);
+  }
+  return {
+    id,
+    kind: requireEnum<ModelKind>(raw.kind, `${path}.kind`, ["chat", "embedding", "ocr-vision"]),
+    contextWindow: optionalNonNegativeInt(raw.contextWindow, `${path}.contextWindow`, 0),
+    maxOutputTokens: optionalNonNegativeInt(raw.maxOutputTokens, `${path}.maxOutputTokens`, 0),
+    toolCalling: optionalBoolean(raw.toolCalling, `${path}.toolCalling`, false),
+    structuredOutput: optionalBoolean(raw.structuredOutput, `${path}.structuredOutput`, false),
+    streaming: optionalBoolean(raw.streaming, `${path}.streaming`, false),
+    costClass: requireEnum<CostClass>(raw.costClass ?? "medium", `${path}.costClass`, [
+      "low",
+      "medium",
+      "high",
+    ]),
+    latencyClass: requireEnum<LatencyClass>(
+      raw.latencyClass ?? "standard",
+      `${path}.latencyClass`,
+      ["fast", "standard", "slow"],
+    ),
+    throughputHint: optionalNonEmptyString(
+      raw.throughputHint,
+      `${path}.throughputHint`,
+      "runtime-configured",
+    ),
+    preferredUseCases: optionalStringArray(raw.preferredUseCases, `${path}.preferredUseCases`, [
+      "Runtime-configured model",
+    ]),
+    knownLimitations: optionalStringArray(raw.knownLimitations, `${path}.knownLimitations`, [
+      "Capabilities are runtime-declared and should be verified in the target environment",
+    ]),
+  };
+}
+
+function resolveProviderConnection(
+  raw: Record<string, unknown>,
+  path: string,
+  modelId: string,
+  env: EnvSource,
+): ProviderConnection {
   const fileBaseUrl = typeof raw.baseUrl === "string" ? raw.baseUrl : "";
   const fileApiKey = typeof raw.apiKey === "string" ? raw.apiKey : "";
   const baseUrl = resolveSecret(modelId, fileBaseUrl, env, "BASE_URL");
@@ -102,6 +229,16 @@ function parseProvider(raw: unknown, index: number, env: EnvSource): ModelProvid
     throw new ConfigInvalidError(`${path}.apiKey must be set via config or environment`);
   }
   validateBaseUrl(baseUrl, path);
+  return { baseUrl, apiKey };
+}
+
+function parseProviderConfig(
+  raw: Record<string, unknown>,
+  path: string,
+  modelId: string,
+  env: EnvSource,
+): ModelProviderConfig {
+  const { baseUrl, apiKey } = resolveProviderConnection(raw, path, modelId, env);
   return {
     modelId,
     baseUrl,
@@ -112,6 +249,19 @@ function parseProvider(raw: unknown, index: number, env: EnvSource): ModelProvid
       raw.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS,
       `${path}.retryBaseDelayMs`,
     ),
+  };
+}
+
+function parseProvider(raw: unknown, index: number, env: EnvSource): ParsedProvider {
+  const path = `providers[${String(index)}]`;
+  if (!isRecord(raw)) {
+    throw new ConfigInvalidError(`${path} must be an object`);
+  }
+  const modelId = requireNonEmptyString(raw.modelId, `${path}.modelId`);
+  const capability = parseProviderCapability(raw.capability, `${path}.capability`, modelId);
+  return {
+    provider: parseProviderConfig(raw, path, modelId, env),
+    ...(capability === undefined ? {} : { capability }),
   };
 }
 
@@ -148,8 +298,16 @@ export function parseGatewayConfig(raw: unknown, env: EnvSource = {}): GatewayCo
   if (!Array.isArray(providersRaw) || providersRaw.length === 0) {
     throw new ConfigInvalidError("providers must be a non-empty array");
   }
-  const providers = providersRaw.map((item, index) => parseProvider(item, index, env));
-  return { providers, circuitBreaker: parseCircuitBreaker(raw.circuitBreaker) };
+  const parsed = providersRaw.map((item, index) => parseProvider(item, index, env));
+  const providers = parsed.map((item) => item.provider);
+  const capabilities = parsed
+    .map((item) => item.capability)
+    .filter((item): item is ModelCapability => item !== undefined);
+  return {
+    providers,
+    circuitBreaker: parseCircuitBreaker(raw.circuitBreaker),
+    ...(capabilities.length === 0 ? {} : { capabilities }),
+  };
 }
 
 export function loadConfigFromFile(path: string, env: EnvSource = {}): GatewayConfig {
@@ -168,16 +326,16 @@ export function loadConfigFromFile(path: string, env: EnvSource = {}): GatewayCo
   return parseGatewayConfig(parsed, env);
 }
 
-// Credential-free projection for logging, CLI output, and serialisation.
+// Credential- and endpoint-free projection for logging, CLI output, and serialisation.
 export function toSafeObject(config: GatewayConfig): SafeGatewayConfig {
   return {
     providers: config.providers.map((provider) => ({
       modelId: provider.modelId,
-      baseUrl: provider.baseUrl,
       timeoutMs: provider.timeoutMs,
       maxRetries: provider.maxRetries,
       retryBaseDelayMs: provider.retryBaseDelayMs,
     })),
     circuitBreaker: config.circuitBreaker,
+    ...(config.capabilities === undefined ? {} : { capabilities: config.capabilities }),
   };
 }

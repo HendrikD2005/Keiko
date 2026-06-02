@@ -3,20 +3,26 @@
 // with no network I/O and no real time. The raw provider body is never echoed into
 // an error; only a redacted, status-level summary is surfaced.
 
+import { request as httpsRequest } from "node:https";
+import { rootCertificates } from "node:tls";
 import {
   AuthenticationError,
   CancelledError,
+  ContextOverflowError,
+  ModelRefusalError,
   ProviderError,
   RateLimitError,
   TimeoutError,
   TransportError,
 } from "./errors.js";
 import { normalizeChatResponse } from "./normalize.js";
+import { redact } from "./redaction.js";
 import type {
   CostClass,
   GatewayRequest,
   ModelProviderConfig,
   NormalizedResponse,
+  NormalizedToolCall,
   ProviderAdapter,
 } from "./types.js";
 
@@ -29,13 +35,74 @@ export interface AdapterDeps {
 
 interface ChatRequestBody {
   readonly model: string;
-  readonly messages: readonly { role: string; content: string }[];
+  readonly messages: readonly {
+    readonly role: string;
+    readonly content: string | null;
+    readonly tool_call_id?: string | undefined;
+    readonly tool_calls?:
+      | readonly {
+          readonly id: string;
+          readonly type: "function";
+          readonly function: { readonly name: string; readonly arguments: string };
+        }[]
+      | undefined;
+  }[];
   readonly tools?: unknown;
   readonly response_format?: unknown;
 }
 
+function headersFromNode(headers: Record<string, string | string[] | undefined>): Headers {
+  const out = new Headers();
+  for (const [name, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) out.append(name, item);
+    } else if (value !== undefined) {
+      out.set(name, value);
+    }
+  }
+  return out;
+}
+
+function isMissingIssuerError(error: unknown): boolean {
+  const cause = isRecord(error) ? error.cause : undefined;
+  const candidates = [error, cause];
+  return candidates.some((item) => {
+    if (!isRecord(item)) return false;
+    return item.code === "UNABLE_TO_GET_ISSUER_CERT_LOCALLY";
+  });
+}
+
+function usesHttps(url: string): boolean {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function buildMessage(
+  message: GatewayRequest["messages"][number],
+): ChatRequestBody["messages"][number] {
+  const toolCalls = message.toolCalls?.map((call) => ({
+    id: call.id,
+    type: "function" as const,
+    function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+  }));
+  return {
+    role: message.role,
+    content:
+      message.role === "assistant" && toolCalls !== undefined && toolCalls.length > 0
+        ? null
+        : message.content,
+    ...(message.role === "tool" && message.toolCallId !== undefined
+      ? { tool_call_id: message.toolCallId }
+      : {}),
+    ...(toolCalls !== undefined && toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+  };
+}
+
 function buildBody(request: GatewayRequest): ChatRequestBody {
-  const messages = request.messages.map((m) => ({ role: m.role, content: m.content }));
+  const messages = request.messages.map(buildMessage);
   const base: ChatRequestBody = { model: request.modelId, messages };
   const tools =
     request.tools === undefined
@@ -64,7 +131,88 @@ function retryAfterMs(response: Response): number | null {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
 }
 
-function mapHttpError(response: Response, modelId: string, secrets: readonly string[]): never {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function redactUnknown(value: unknown, secrets: readonly string[]): unknown {
+  if (typeof value === "string") {
+    return redact(value, secrets);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactUnknown(item, secrets));
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactUnknown(item, secrets)]),
+    );
+  }
+  return value;
+}
+
+function redactRecord(
+  value: Record<string, unknown> | null,
+  secrets: readonly string[],
+): Record<string, unknown> | null {
+  return value === null ? null : (redactUnknown(value, secrets) as Record<string, unknown>);
+}
+
+function redactToolCall(call: NormalizedToolCall, secrets: readonly string[]): NormalizedToolCall {
+  return {
+    ...call,
+    name: redact(call.name, secrets),
+    arguments: redactUnknown(call.arguments, secrets) as Record<string, unknown>,
+  };
+}
+
+function redactResponse(
+  response: NormalizedResponse,
+  secrets: readonly string[],
+): NormalizedResponse {
+  return {
+    ...response,
+    content: redact(response.content, secrets),
+    toolCalls: response.toolCalls.map((call) => redactToolCall(call, secrets)),
+    structuredOutput: redactRecord(response.structuredOutput, secrets),
+  };
+}
+
+function errorSignal(payload: unknown): string {
+  const error = isRecord(payload) && isRecord(payload.error) ? payload.error : payload;
+  if (!isRecord(error)) {
+    return "";
+  }
+  return [error.code, error.type, error.message]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+}
+
+function isContextOverflow(response: Response, payload: unknown): boolean {
+  if (response.status !== 400 && response.status !== 413 && response.status !== 422) {
+    return false;
+  }
+  return /context[_ -]?length[_ -]?exceeded|context window|context.*exceed|maximum context|too many tokens|prompt too long|context overflow/.test(
+    errorSignal(payload),
+  );
+}
+
+function isModelRefusal(payload: unknown): boolean {
+  return /content[_ -]?filter|refus|safety|policy/.test(errorSignal(payload));
+}
+
+function mapHttpError(
+  response: Response,
+  modelId: string,
+  secrets: readonly string[],
+  payload: unknown,
+): never {
+  if (isContextOverflow(response, payload)) {
+    throw new ContextOverflowError(`provider reported context overflow for '${modelId}'`, secrets);
+  }
+  if (isModelRefusal(payload)) {
+    throw new ModelRefusalError(`provider refused the request for '${modelId}'`, secrets);
+  }
   if (response.status === 401 || response.status === 403) {
     throw new AuthenticationError(`provider rejected credentials for '${modelId}'`, secrets);
   }
@@ -81,10 +229,12 @@ function mapHttpError(response: Response, modelId: string, secrets: readonly str
 export class OpenAiAdapter implements ProviderAdapter {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
+  private readonly useBundledCaFallback: boolean;
 
   constructor(private readonly deps: AdapterDeps) {
     this.fetchImpl = deps.fetchImpl ?? globalThis.fetch;
     this.now = deps.now ?? Date.now;
+    this.useBundledCaFallback = deps.fetchImpl === undefined;
   }
 
   call = async (
@@ -101,18 +251,22 @@ export class OpenAiAdapter implements ProviderAdapter {
     const start = this.now();
     const response = await this.dispatch(request, config, secrets);
     if (!response.ok) {
-      mapHttpError(response, config.modelId, secrets);
+      const errorPayload = await this.readErrorBody(response);
+      mapHttpError(response, config.modelId, secrets, errorPayload);
     }
     const payload = await this.readBody(response, config, secrets);
-    return normalizeChatResponse(
-      payload,
-      config.modelId,
-      {
-        requestId: this.deps.requestId,
-        latencyMs: this.now() - start,
-        costClass: this.deps.costClass,
-      },
-      request.responseFormat?.type === "json_schema",
+    return redactResponse(
+      normalizeChatResponse(
+        payload,
+        config.modelId,
+        {
+          requestId: this.deps.requestId,
+          latencyMs: this.now() - start,
+          costClass: this.deps.costClass,
+        },
+        request.responseFormat?.type === "json_schema",
+      ),
+      secrets,
     );
   };
 
@@ -124,29 +278,81 @@ export class OpenAiAdapter implements ProviderAdapter {
     const timeoutSignal = AbortSignal.timeout(config.timeoutMs);
     const cancel = request.cancellationSignal;
     const signal = cancel ? AbortSignal.any([timeoutSignal, cancel]) : timeoutSignal;
+    const url = `${config.baseUrl}/chat/completions`;
+    const body = JSON.stringify(buildBody(request));
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${config.apiKey}`,
+    };
     try {
-      return await this.fetchImpl(`${config.baseUrl}/chat/completions`, {
+      return await this.fetchImpl(url, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify(buildBody(request)),
+        headers,
+        body,
         signal,
       });
     } catch (error) {
-      throw this.mapDispatchError(error, config, cancel, secrets);
+      if (this.useBundledCaFallback && usesHttps(url) && isMissingIssuerError(error)) {
+        try {
+          // Some shared-OpenSSL Node builds do not use Node's bundled public CA set by default.
+          return await this.dispatchWithBundledCa(url, headers, body, signal);
+        } catch (fallbackError) {
+          throw this.mapDispatchError(fallbackError, config, cancel, timeoutSignal, secrets);
+        }
+      }
+      throw this.mapDispatchError(error, config, cancel, timeoutSignal, secrets);
     }
+  }
+
+  private dispatchWithBundledCa(
+    url: string,
+    headers: Record<string, string>,
+    body: string,
+    signal: AbortSignal,
+  ): Promise<Response> {
+    return new Promise<Response>((resolve, reject) => {
+      const req = httpsRequest(
+        url,
+        {
+          method: "POST",
+          headers,
+          ca: Array.from(rootCertificates),
+          signal,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
+          res.on("end", () => {
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                status: res.statusCode ?? 500,
+                statusText: res.statusMessage ?? "",
+                headers: headersFromNode(res.headers),
+              }),
+            );
+          });
+          res.on("error", reject);
+        },
+      );
+      req.on("error", reject);
+      req.end(body);
+    });
   }
 
   private mapDispatchError(
     error: unknown,
     config: ModelProviderConfig,
     cancel: AbortSignal | undefined,
+    timeout: AbortSignal,
     secrets: readonly string[],
   ): Error {
     if (cancel?.aborted === true) {
       return new CancelledError(`request for '${config.modelId}' cancelled`, secrets);
+    }
+    if (timeout.aborted) {
+      return new TimeoutError(`request for '${config.modelId}' timed out`, secrets);
     }
     if (error instanceof DOMException && error.name === "TimeoutError") {
       return new TimeoutError(`request for '${config.modelId}' timed out`, secrets);
@@ -163,6 +369,14 @@ export class OpenAiAdapter implements ProviderAdapter {
       return await response.json();
     } catch {
       throw new TransportError(`provider sent an unreadable body for '${config.modelId}'`, secrets);
+    }
+  }
+
+  private async readErrorBody(response: Response): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch {
+      return null;
     }
   }
 }

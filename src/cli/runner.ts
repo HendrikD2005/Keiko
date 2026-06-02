@@ -6,6 +6,8 @@ import { runGenTestsCli } from "./gen-tests.js";
 import { runInvestigateCli } from "./investigate.js";
 import { runEvidenceCli } from "./evidence.js";
 import { runEvaluateCli } from "./evaluate.js";
+import { runInitCli } from "./init.js";
+import { runLifecycleCli } from "./lifecycle.js";
 import { runUiCli } from "./ui.js";
 import type { EnvSource } from "../gateway/config.js";
 import { SDK_VERSION } from "../sdk/index.js";
@@ -23,6 +25,8 @@ Enterprise model-agnostic developer-assist coding agent.
 Usage:
   keiko [--help | -h]      Print this help and exit.
   keiko [--version | -v]   Print the version and exit.
+  keiko init [OPTIONS]     Add local package.json start/stop scripts.
+  keiko start|stop|status|restart Manage the local Keiko UI process.
   keiko models list        List registered model capabilities.
   keiko models validate    Validate gateway configuration.
   keiko run <task>         Run a bounded dry-run task through the agent harness.
@@ -40,6 +44,29 @@ Exit codes:
   2  Usage error
 `;
 
+type CommandHandler = (
+  rest: readonly string[],
+  io: CliIo,
+  env: EnvSource,
+) => number | Promise<number>;
+
+const COMMAND_HANDLERS: Readonly<Record<string, CommandHandler>> = {
+  models: runModelsCli,
+  run: runAgentCli,
+  context: (rest, io) => runContextCli(rest, io),
+  verify: (rest, io) => runVerifyCli(rest, io),
+  "gen-tests": runGenTestsCli,
+  investigate: runInvestigateCli,
+  evidence: (rest, io, env) => runEvidenceCli(rest, io, { env }),
+  evaluate: (rest, io, env) => runEvaluateCli(rest, io, env, {}),
+  init: runInitCli,
+  start: (rest, io, env) => runLifecycleCli("start", rest, io, env),
+  stop: (rest, io, env) => runLifecycleCli("stop", rest, io, env),
+  status: (rest, io, env) => runLifecycleCli("status", rest, io, env),
+  restart: (rest, io, env) => runLifecycleCli("restart", rest, io, env),
+  ui: runUiCli,
+};
+
 // Dispatches named subcommands; returns undefined when the name is not recognised.
 function dispatchCommand(
   name: string,
@@ -47,34 +74,7 @@ function dispatchCommand(
   io: CliIo,
   env: EnvSource,
 ): number | Promise<number> | undefined {
-  if (name === "models") {
-    return runModelsCli(rest, io, env);
-  }
-  if (name === "run") {
-    return runAgentCli(rest, io, env);
-  }
-  if (name === "context") {
-    return runContextCli(rest, io);
-  }
-  if (name === "verify") {
-    return runVerifyCli(rest, io);
-  }
-  if (name === "gen-tests") {
-    return runGenTestsCli(rest, io, env);
-  }
-  if (name === "investigate") {
-    return runInvestigateCli(rest, io, env);
-  }
-  if (name === "evidence") {
-    return runEvidenceCli(rest, io);
-  }
-  if (name === "evaluate") {
-    return runEvaluateCli(rest, io, env, {});
-  }
-  if (name === "ui") {
-    return runUiCli(rest, io, env);
-  }
-  return undefined;
+  return COMMAND_HANDLERS[name]?.(rest, io, env);
 }
 
 // Returns a number for synchronous commands; the async `run` command returns a Promise.
