@@ -1,12 +1,13 @@
 // Parsing + validation of the `POST /api/runs` request body (ADR-0011 D5 route 5). The body arrives
 // as untyped JSON; this module narrows it (no `any`) into a typed `RunRequest` or a typed validation
 // error. It performs SHAPE validation only — exactly one of workflowId/taskType, a present input
-// object, a non-empty modelId. The create route is ALWAYS dry-run: `apply` is forced false here
-// regardless of the body, so applying is reachable only via the gated apply route (D8). The deeper guards
-// (`isSensitivePath`, patch limits, target validation) are enforced by the workflow/harness entry
-// points the engine calls; the BFF never reimplements them.
+// object, a non-empty modelId, and a selected project workspaceRoot. The create route is ALWAYS
+// dry-run: `apply` is forced false here regardless of the body, so applying is reachable only via
+// the gated apply route (D8). The deeper guards (`isSensitivePath`, patch limits, target validation)
+// are enforced by the workflow/harness entry points the engine calls; the BFF never reimplements
+// them.
 
-export type RunKind = "unit-tests" | "bug-investigation" | "explain-plan";
+export type RunKind = "unit-tests" | "bug-investigation" | "explain-plan" | "verify";
 
 export interface RunRequest {
   readonly kind: RunKind;
@@ -47,7 +48,193 @@ function resolveKind(body: Record<string, unknown>): RunKind | RunRequestError {
   if (taskType === "explain-plan") {
     return "explain-plan";
   }
+  if (taskType === "verify") {
+    return "verify";
+  }
   return { code: "BAD_REQUEST", message: "Unsupported taskType." };
+}
+
+function validateWorkspaceRoot(input: Record<string, unknown>): RunRequestError | null {
+  const workspaceRoot = input.workspaceRoot;
+  if (typeof workspaceRoot !== "string" || workspaceRoot.length === 0) {
+    return { code: "BAD_REQUEST", message: "A non-empty workspaceRoot is required." };
+  }
+  return null;
+}
+
+function validateStringField(
+  input: Record<string, unknown>,
+  name: string,
+  label: string,
+): RunRequestError | null {
+  const value = input[name];
+  if (typeof value !== "string" || value.length === 0) {
+    return { code: "BAD_REQUEST", message: `${label} must be a non-empty string.` };
+  }
+  return null;
+}
+
+function validateOptionalStringField(
+  input: Record<string, unknown>,
+  name: string,
+  label: string,
+): RunRequestError | null {
+  const value = input[name];
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return { code: "BAD_REQUEST", message: `${label} must be a string.` };
+  }
+  return null;
+}
+
+function validateStringArray(
+  value: unknown,
+  label: string,
+  options: { readonly required: boolean; readonly allowEmpty: boolean } = {
+    required: false,
+    allowEmpty: true,
+  },
+): RunRequestError | null {
+  if (value === undefined) {
+    return options.required
+      ? { code: "BAD_REQUEST", message: `${label} must be a string array.` }
+      : null;
+  }
+  if (!Array.isArray(value)) {
+    return { code: "BAD_REQUEST", message: `${label} must be a string array.` };
+  }
+  if (!options.allowEmpty && value.length === 0) {
+    return { code: "BAD_REQUEST", message: `${label} must contain at least one entry.` };
+  }
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0) {
+      return { code: "BAD_REQUEST", message: `${label} must contain non-empty strings.` };
+    }
+  }
+  return null;
+}
+
+// Verify shape: targetFiles (when present) must be a string[] of non-empty entries. The deeper
+// guards (path containment, script detection) run inside the verification orchestrator; the BFF
+// only validates shape here.
+function validateVerifyInput(input: Record<string, unknown>): RunRequestError | null {
+  return validateStringArray(input.targetFiles, "verify targetFiles");
+}
+
+function validateExplainPlanInput(input: Record<string, unknown>): RunRequestError | null {
+  return (
+    validateStringField(input, "filePath", "explain-plan filePath") ??
+    validateOptionalStringField(input, "question", "explain-plan question")
+  );
+}
+
+function validateUnitTestTarget(target: Record<string, unknown>): RunRequestError | null {
+  const kind = target.kind;
+  if (kind === "file") {
+    return (
+      validateStringField(target, "filePath", "unit-test target.filePath") ??
+      validateOptionalStringField(target, "targetFunction", "unit-test target.targetFunction")
+    );
+  }
+  if (kind === "module") {
+    return validateStringField(target, "moduleDir", "unit-test target.moduleDir");
+  }
+  if (kind === "changedFiles") {
+    return validateStringArray(target.filePaths, "unit-test target.filePaths", {
+      required: true,
+      allowEmpty: false,
+    });
+  }
+  return {
+    code: "BAD_REQUEST",
+    message: "unit-test target.kind must be one of file, module, changedFiles.",
+  };
+}
+
+function validateUnitTestsInput(input: Record<string, unknown>): RunRequestError | null {
+  const target = input.target;
+  if (!isRecord(target)) {
+    return { code: "BAD_REQUEST", message: "unit-test target must be an object." };
+  }
+  return validateUnitTestTarget(target);
+}
+
+function validateBugReport(report: Record<string, unknown>): RunRequestError | null {
+  const descriptionError = validateOptionalStringField(
+    report,
+    "description",
+    "bug report.description",
+  );
+  if (descriptionError !== null) {
+    return descriptionError;
+  }
+  const failingOutputError = validateOptionalStringField(
+    report,
+    "failingOutput",
+    "bug report.failingOutput",
+  );
+  if (failingOutputError !== null) {
+    return failingOutputError;
+  }
+  const stackTraceError = validateOptionalStringField(report, "stackTrace", "bug report.stackTrace");
+  if (stackTraceError !== null) {
+    return stackTraceError;
+  }
+  const targetFilesError = validateStringArray(report.targetFiles, "bug report.targetFiles");
+  if (targetFilesError !== null) {
+    return targetFilesError;
+  }
+  return hasBugEvidence(report)
+    ? null
+    : {
+        code: "BAD_REQUEST",
+        message:
+          "bug report requires at least one of description, failingOutput, stackTrace, or targetFiles.",
+      };
+}
+
+function hasNonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasNonEmptyStringEntry(value: unknown): boolean {
+  return Array.isArray(value) && value.some(hasNonEmptyString);
+}
+
+function hasBugEvidence(report: Record<string, unknown>): boolean {
+  return (
+    hasNonEmptyString(report.description) ||
+    hasNonEmptyString(report.failingOutput) ||
+    hasNonEmptyString(report.stackTrace) ||
+    hasNonEmptyStringEntry(report.targetFiles)
+  );
+}
+
+function validateBugInvestigationInput(input: Record<string, unknown>): RunRequestError | null {
+  const report = input.report;
+  if (!isRecord(report)) {
+    return { code: "BAD_REQUEST", message: "bug report must be an object." };
+  }
+  return validateBugReport(report);
+}
+
+function validateRunInput(kind: RunKind, input: Record<string, unknown>): RunRequestError | null {
+  const workspaceRootError = validateWorkspaceRoot(input);
+  if (workspaceRootError !== null) {
+    return workspaceRootError;
+  }
+  if (kind === "verify") {
+    return validateVerifyInput(input);
+  }
+  if (kind === "explain-plan") {
+    return validateExplainPlanInput(input);
+  }
+  if (kind === "unit-tests") {
+    return validateUnitTestsInput(input);
+  }
+  return validateBugInvestigationInput(input);
 }
 
 // Parses the raw JSON text into a validated RunRequest, or a typed BAD_REQUEST error.
@@ -72,6 +259,10 @@ export function parseRunRequest(raw: string): RunRequest | RunRequestError {
   const input = parsed.input;
   if (!isRecord(input)) {
     return { code: "BAD_REQUEST", message: "An input object is required." };
+  }
+  const inputError = validateRunInput(kind, input);
+  if (inputError !== null) {
+    return inputError;
   }
   const limits = parsed.limits;
   return {

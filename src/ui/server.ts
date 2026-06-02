@@ -1,15 +1,9 @@
-// The Wave 2 BFF (ADR-0011 D1/D2/D5/D7/D8/D9). A hand-written node:http server with zero new runtime
-// dependencies: it binds 127.0.0.1 only, sets the security headers + hash-based CSP on EVERY response
-// (including the SSE and error paths), rejects non-loopback Host/Origin (DNS-rebinding defense), and
-// dispatches the eleven-route API contract through deps-bound handlers. A handler returns a
-// RouteResult (status + JSON body the server serializes) or the STREAMING sentinel, meaning it has
-// taken over the raw ServerResponse (the SSE events route). Static export is served from a
-// path-traversal-safe contained root with an index fallback. The handler dependencies (resolved
-// config, evidence store, run registry, redactor) are optional so the 3-arg
-// `createUiServer({ staticRoot, csp, port })` form still works (Wave 1 server tests, `keiko ui` smoke).
+// The local UI BFF binds 127.0.0.1 only, applies security headers and CSP to every response,
+// rejects non-loopback Host/Origin headers, dispatches API routes through injected handlers,
+// and serves the static export from a contained root.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { applySecurityHeaders } from "./headers.js";
 import { isAllowedHost } from "./host-check.js";
 import { resolveContainedPath, serveFile } from "./static.js";
@@ -25,8 +19,9 @@ import {
 } from "./routes.js";
 import { buildRedactor, type UiHandlerDeps } from "./deps.js";
 import { createRunRegistry } from "./runs.js";
+import { createInMemoryUiStore } from "./store/index.js";
 
-export const DEFAULT_UI_PORT = 4319;
+export const DEFAULT_UI_PORT = 1983;
 export const UI_HOST = "127.0.0.1";
 
 export interface UiServerDeps {
@@ -47,8 +42,34 @@ function writeJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function isJsonRequest(req: IncomingMessage): boolean {
+  const header = req.headers["content-type"];
+  const value = typeof header === "string" ? header : header?.[0];
+  return value?.split(";", 1)[0]?.trim().toLowerCase() === "application/json";
+}
+
+function hasCsrfHeader(req: IncomingMessage): boolean {
+  const header = req.headers["x-keiko-csrf"];
+  const value = Array.isArray(header) ? header[0] : header;
+  return value === "1";
+}
+
+function rejectUnsupportedMediaType(res: ServerResponse): void {
+  writeJson(
+    res,
+    415,
+    errorBody("UNSUPPORTED_MEDIA_TYPE", "State-changing API requests must use JSON."),
+  );
+}
+
+function rejectCsrf(res: ServerResponse): void {
+  writeJson(res, 403, errorBody("FORBIDDEN_CSRF", "Missing state-changing request guard."));
+}
+
 // A minimal default deps object so a 3-arg server can still serve the deps-bound read routes (e.g.
-// `/api/models`, which needs no config) without a config or evidence dir.
+// `/api/models` and `/api/workspace`, which need no config) without a config or evidence dir. The
+// fallback UI store is in-memory: a 3-arg server is used by the Wave 1 host smoke and by tests that
+// never exercise the store routes, so an ephemeral in-memory store is the safe degraded shape.
 function fallbackDeps(): UiHandlerDeps {
   return {
     config: undefined,
@@ -58,11 +79,31 @@ function fallbackDeps(): UiHandlerDeps {
     redactor: buildRedactor({}),
     registry: createRunRegistry(),
     modelPortFactory: () => undefined,
+    store: createInMemoryUiStore(),
   };
 }
 
+function isStateChangingMethod(method: string): boolean {
+  return (
+    method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE"
+  );
+}
+
+// Returns true when the request was rejected (caller should return immediately).
+function rejectIfInvalidStateChange(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!isJsonRequest(req)) {
+    rejectUnsupportedMediaType(res);
+    return true;
+  }
+  if (!hasCsrfHeader(req)) {
+    rejectCsrf(res);
+    return true;
+  }
+  return false;
+}
+
 async function dispatchApi(
-  deps: UiServerDeps,
+  handlerDeps: UiHandlerDeps,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -77,8 +118,10 @@ async function dispatchApi(
     writeJson(res, 405, methodNotAllowedBody());
     return;
   }
+  if (isStateChangingMethod(method) && rejectIfInvalidStateChange(req, res)) {
+    return;
+  }
   const ctx: RouteContext = { req, res, params: match.params, url };
-  const handlerDeps = deps.handlerDeps ?? fallbackDeps();
   const outcome = await match.definition.handler(ctx, handlerDeps);
   if (outcome === STREAMING) {
     return;
@@ -91,10 +134,17 @@ async function serveStatic(
   staticRoot: string,
   pathname: string,
 ): Promise<void> {
-  const target = pathname === "/" ? "/index.html" : pathname;
-  const resolved = resolveContainedPath(staticRoot, target);
-  if (resolved !== undefined && (await serveFile(res, resolved))) {
-    return;
+  const targets =
+    pathname === "/"
+      ? ["/index.html"]
+      : extname(pathname) === ""
+        ? [pathname, `${pathname}.html`, `${pathname}/index.html`]
+        : [pathname];
+  for (const target of targets) {
+    const resolved = resolveContainedPath(staticRoot, target);
+    if (resolved !== undefined && (await serveFile(res, resolved))) {
+      return;
+    }
   }
   const indexPath = join(staticRoot, "index.html");
   if (await serveFile(res, indexPath)) {
@@ -108,7 +158,12 @@ function rejectForbiddenHost(res: ServerResponse): void {
   writeJson(res, 403, body);
 }
 
-function handle(deps: UiServerDeps, req: IncomingMessage, res: ServerResponse): void {
+function handle(
+  deps: UiServerDeps,
+  handlerDeps: UiHandlerDeps,
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
   const url = new URL(req.url ?? "/", `http://${UI_HOST}`);
   const apiPath = isApiPath(url.pathname);
   applySecurityHeaders(res, deps.csp, apiPath);
@@ -118,7 +173,7 @@ function handle(deps: UiServerDeps, req: IncomingMessage, res: ServerResponse): 
   }
   const method = (req.method ?? "GET").toUpperCase();
   const work = apiPath
-    ? dispatchApi(deps, req, res, method, url)
+    ? dispatchApi(handlerDeps, req, res, method, url)
     : serveStatic(res, deps.staticRoot, url.pathname);
   void work.catch(() => {
     if (!res.headersSent) {
@@ -130,9 +185,16 @@ function handle(deps: UiServerDeps, req: IncomingMessage, res: ServerResponse): 
 }
 
 // Creates the BFF server. The caller binds it with `server.listen(deps.port, UI_HOST)` so it never
-// listens on a non-loopback interface.
+// listens on a non-loopback interface. The previous PTY WebSocket upgrade handler is removed —
+// the terminal tool is now bounded-exec over plain HTTP (ADR-0018 D1/D8).
 export function createUiServer(deps: UiServerDeps): Server {
-  return createServer((req, res) => {
-    handle(deps, req, res);
+  const handlerDeps = deps.handlerDeps ?? fallbackDeps();
+  const server = createServer((req, res) => {
+    handle(deps, handlerDeps, req, res);
   });
+  server.on("upgrade", (_req, socket) => {
+    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+  });
+  return server;
 }

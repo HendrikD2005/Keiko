@@ -1,6 +1,5 @@
-// Wave 2 local UI BFF (ADR-0011). A hand-written node:http server with zero new runtime
-// dependencies that serves the static export and exposes the eleven-route JSON + SSE API contract;
-// the browser tier is presentation-only and holds no secret, harness handle, or filesystem authority.
+// Local UI BFF. The browser tier stays presentation-only: model, filesystem, PTY, and harness
+// authority remain in the loopback Node process behind JSON, SSE, and token-scoped WebSocket seams.
 
 export { createUiServer, DEFAULT_UI_PORT, UI_HOST, type UiServerDeps } from "./server.js";
 export { buildCspHeader, extractInlineScriptHashes } from "./csp.js";
@@ -54,3 +53,71 @@ export {
   type EvidencePersistContext,
   type RunIdentity,
 } from "./evidence.js";
+// ADR-0013 — UI-local SQLite persistence: ports, factories, and route handlers.
+export {
+  createInMemoryUiStore,
+  createNodeUiStore,
+  isProjectAvailable,
+  resolveUiDbPath,
+  runMigrations,
+  SCHEMA_VERSION,
+  UI_DB_DIRNAME,
+  UI_DB_FILENAME,
+  UiStoreError,
+  validateProjectPath,
+  type Chat,
+  type ChatMessage,
+  type ChatRole,
+  type CreateChatOptions,
+  type NewChatMessage,
+  type Project,
+  type UiStore,
+  type UiStoreErrorCode,
+  type UiStoreFactoryOptions,
+  type UpdateChatPatch,
+  type UpdateProjectPatch,
+  type WorkflowStatus,
+} from "./store/index.js";
+export {
+  handleListProjects,
+  handleCreateProject,
+  handleUpdateProject,
+  handleDeleteProject,
+  handleListChats,
+  handleCreateChat,
+  handleUpdateChat,
+  handleDeleteChat,
+  handleListMessages,
+  handleCreateMessage,
+} from "./store-handlers.js";
+export {
+  createTerminalExecutionManager,
+  buildTerminalPolicySummary,
+  listDirectories,
+  type TerminalDirectoryListing,
+  type TerminalExecutionInput,
+  type TerminalExecutionManager,
+  type TerminalExecutionResult,
+  type TerminalEventEmitter,
+  type TerminalEventEnvelope,
+  type TerminalEventKind,
+  type TerminalPolicySummary,
+} from "./terminal.js";
+export { TerminalToolError, type TerminalErrorCode } from "./terminal-errors.js";
+export {
+  buildTerminalEvidenceEntry,
+  appendTerminalEvidence,
+  type TerminalEvidenceEntry,
+} from "./terminal-evidence.js";
+export {
+  listFilesDirectories,
+  readFilesPreview,
+  readFilesTree,
+  type FilesDirectoryEntry,
+  type FilesDirectoryListing,
+  type FilesDirectoryRoot,
+  type FilesEntryKind,
+  type FilesPreviewResponse,
+  type FilesTreeEntry,
+  type FilesTreeResponse,
+} from "./files.js";

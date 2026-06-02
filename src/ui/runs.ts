@@ -34,6 +34,9 @@ export interface RunRecord {
   readonly cancel: (reason?: string) => void;
   // Present only for a workflow run that finished in a dry-run-success (appliable) state.
   appliable: AppliableSnapshot | undefined;
+  // Captured after the gated apply route succeeds. The original dry-run report remains in `report`.
+  applyReport: unknown;
+  appliedAt: number | undefined;
   // Epoch ms at which a terminated record becomes eligible for eviction; undefined while running.
   terminatedAt: number | undefined;
 }
@@ -125,6 +128,8 @@ function registerRun(state: RegistryState, input: RegisterRunInput): RunRecord {
     report: undefined,
     cancel: input.cancel,
     appliable: undefined,
+    applyReport: undefined,
+    appliedAt: undefined,
     terminatedAt: undefined,
   };
   state.records.set(input.runId, record);
@@ -157,11 +162,20 @@ export function createRunRegistry(options: RunRegistryOptions = {}): RunRegistry
   };
   return {
     register: (input): RunRecord => registerRun(state, input),
-    get: (runId): RunRecord | undefined => state.records.get(runId),
+    get: (runId): RunRecord | undefined => {
+      evictExpired(state);
+      return state.records.get(runId);
+    },
     complete: (runId, status, report, appliable): void => {
       completeRun(state, runId, status, report, appliable);
     },
-    activeCount: (): number => countActive(state),
-    size: (): number => state.records.size,
+    activeCount: (): number => {
+      evictExpired(state);
+      return countActive(state);
+    },
+    size: (): number => {
+      evictExpired(state);
+      return state.records.size;
+    },
   };
 }
