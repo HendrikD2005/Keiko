@@ -19,9 +19,11 @@ import {
   buildRedactor,
   createRunRegistry,
   handleApplyRun,
+  handleGetRun,
   QueueEventSink,
   type UiHandlerDeps,
 } from "../../src/ui/index.js";
+import { createInMemoryUiStore } from "../../src/ui/store/index.js";
 import {
   createInMemoryEvidenceStore,
   listEvidence,
@@ -45,7 +47,9 @@ const TEST_DIFF =
   `+// token ${SECRET}\n` +
   "+describe('add', () => {\n" +
   "+  it('adds', () => expect(add(1, 2)).toBe(3));\n" +
-  "+});\n";
+	  "+});\n";
+
+const POST_JSON_HEADERS = { "Content-Type": "application/json", "X-Keiko-CSRF": "1" } as const;
 
 function fakeModel(content: string): ModelPort {
   const response: NormalizedResponse = {
@@ -66,7 +70,16 @@ let workspace: string;
 let registry: ReturnType<typeof createRunRegistry>;
 let evidenceStore: EvidenceStore;
 
-function handlerDeps(model: ModelPort): UiHandlerDeps {
+interface HandlerDepsOptions {
+  readonly registerWorkspace?: boolean;
+  readonly modelPortFactory?: () => ModelPort | undefined;
+}
+
+function handlerDeps(model: ModelPort, options: HandlerDepsOptions = {}): UiHandlerDeps {
+  const store = createInMemoryUiStore();
+  if (options.registerWorkspace !== false) {
+    store.createProject(workspace);
+  }
   return {
     config: undefined,
     configPresent: false,
@@ -74,11 +87,12 @@ function handlerDeps(model: ModelPort): UiHandlerDeps {
     env: { KEY: SECRET },
     redactor: buildRedactor({ KEY: SECRET }),
     registry,
-    modelPortFactory: () => model,
+    modelPortFactory: options.modelPortFactory ?? ((): ModelPort => model),
+    store,
   };
 }
 
-async function start(model: ModelPort): Promise<void> {
+async function start(model: ModelPort, options: HandlerDepsOptions = {}): Promise<void> {
   staticRoot = mkdtempSync(join(tmpdir(), "keiko-ui-runs-"));
   registry = createRunRegistry();
   evidenceStore = createInMemoryEvidenceStore();
@@ -90,7 +104,7 @@ async function start(model: ModelPort): Promise<void> {
     staticRoot,
     csp: buildCspHeader([]),
     port,
-    handlerDeps: handlerDeps(model),
+    handlerDeps: handlerDeps(model, options),
   });
   await new Promise<void>((res) => server.listen(port, UI_HOST, res));
 }
@@ -107,6 +121,7 @@ interface CreateResponse {
 async function createRun(apply = false): Promise<{ status: number; body: CreateResponse }> {
   const res = await fetch(`${base()}/api/runs`, {
     method: "POST",
+    headers: POST_JSON_HEADERS,
     body: JSON.stringify({
       workflowId: "unit-test-generation",
       input: { workspaceRoot: workspace, target: { kind: "file", filePath: "src/add.ts" } },
@@ -165,7 +180,12 @@ describe("POST /api/runs", () => {
     await new Promise<void>((res) => server.listen(port, UI_HOST, res));
     const res = await fetch(`${base()}/api/runs`, {
       method: "POST",
-      body: JSON.stringify({ taskType: "explain-plan", input: { filePath: "x" }, modelId: "m" }),
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        taskType: "explain-plan",
+        input: { filePath: "x", workspaceRoot: workspace },
+        modelId: "m",
+      }),
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -177,6 +197,7 @@ describe("POST /api/runs", () => {
     await start(fakeModel("noop"));
     const res = await fetch(`${base()}/api/runs`, {
       method: "POST",
+      headers: POST_JSON_HEADERS,
       body: JSON.stringify({ input: {}, modelId: "m" }),
     });
     expect(res.status).toBe(400);
@@ -190,8 +211,26 @@ describe("GET /api/runs/:runId", () => {
     await awaitTerminal(body.runId);
     const res = await fetch(`${base()}/api/runs/${body.runId}`);
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { report: { status: string } };
+    const json = (await res.json()) as {
+      report: {
+        status: string;
+        evidence: {
+          runId: string;
+          fingerprint: string;
+          evidenceLocation: string;
+          usageTotals: { requestCount: number };
+          verificationStatus: string;
+          knownLimitations: readonly string[];
+        };
+      };
+    };
     expect(json.report.status).toBe("dry-run");
+    expect(json.report.evidence.runId).toBe(body.runId);
+    expect(json.report.evidence.fingerprint).toBe(body.fingerprint);
+    expect(json.report.evidence.evidenceLocation).toBe(`${body.runId}.json`);
+    expect(json.report.evidence.usageTotals.requestCount).toBe(1);
+    expect(json.report.evidence.verificationStatus).toBe("not-run");
+    expect(json.report.evidence.knownLimitations.length).toBeGreaterThan(0);
   });
 
   it("returns 404 for an unknown run", async () => {
@@ -226,17 +265,29 @@ describe("POST /api/runs/:runId/cancel", () => {
   it("is idempotent and returns ok", async () => {
     await start(fakeModel(["```diff", TEST_DIFF.trimEnd(), "```"].join("\n")));
     const { body } = await createRun();
-    const first = await fetch(`${base()}/api/runs/${body.runId}/cancel`, { method: "POST" });
+    const first = await fetch(`${base()}/api/runs/${body.runId}/cancel`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(first.status).toBe(200);
     expect((await first.json()) as { ok: boolean }).toEqual({ ok: true });
     await awaitTerminal(body.runId);
-    const second = await fetch(`${base()}/api/runs/${body.runId}/cancel`, { method: "POST" });
+    const second = await fetch(`${base()}/api/runs/${body.runId}/cancel`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(second.status).toBe(200);
   });
 
   it("returns 404 for an unknown run", async () => {
     await start(fakeModel("noop"));
-    const res = await fetch(`${base()}/api/runs/none/cancel`, { method: "POST" });
+    const res = await fetch(`${base()}/api/runs/none/cancel`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(res.status).toBe(404);
   });
 });
@@ -244,7 +295,11 @@ describe("POST /api/runs/:runId/cancel", () => {
 describe("POST /api/runs/:runId/apply (gated write path)", () => {
   it("returns 404 for an unknown run", async () => {
     await start(fakeModel("noop"));
-    const res = await fetch(`${base()}/api/runs/none/apply`, { method: "POST" });
+    const res = await fetch(`${base()}/api/runs/none/apply`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(res.status).toBe(404);
   });
 
@@ -252,15 +307,20 @@ describe("POST /api/runs/:runId/apply (gated write path)", () => {
     await start(fakeModel("a read-only explanation, no patch"));
     const res = await fetch(`${base()}/api/runs`, {
       method: "POST",
+      headers: POST_JSON_HEADERS,
       body: JSON.stringify({
         taskType: "explain-plan",
-        input: { filePath: "src/add.ts" },
+        input: { filePath: "src/add.ts", workspaceRoot: workspace },
         modelId: "m",
       }),
     });
     const created = (await res.json()) as CreateResponse;
     await awaitTerminal(created.runId);
-    const apply = await fetch(`${base()}/api/runs/${created.runId}/apply`, { method: "POST" });
+    const apply = await fetch(`${base()}/api/runs/${created.runId}/apply`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(apply.status).toBe(409);
     expect((await apply.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "NOT_APPLIABLE" },
@@ -288,11 +348,15 @@ maybeApply("POST /api/runs/:runId/apply — applies through the gated workflow",
     await start(fakeModel(["```diff", TEST_DIFF.trimEnd(), "```"].join("\n")));
     const { body } = await createRun();
     await awaitTerminal(body.runId);
-    const res = await fetch(`${base()}/api/runs/${body.runId}/apply`, { method: "POST" });
+    const res = await fetch(`${base()}/api/runs/${body.runId}/apply`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { report: { status: string } };
     expect(["completed", "dry-run"]).toContain(json.report.status);
-  });
+  }, 60_000);
 });
 
 describe("no secret reaches any response body", () => {
@@ -341,13 +405,18 @@ describe("FIX 1 — UI runs persist a redacted evidence manifest (AC5)", () => {
     const manifest = loadEvidence(evidenceStore, body.runId);
     expect(manifest?.evidenceSchemaVersion).toBe("1");
     expect(manifest?.run.runId).toBe(body.runId);
+    expect(manifest?.run.fingerprint).toBe(body.fingerprint);
     expect(JSON.stringify(manifest)).not.toContain(SECRET);
   });
 
   it("persists a cancelled run with a cancelled outcome (literal AC5)", async () => {
     await start(abortableModel());
     const { body } = await createRun();
-    await fetch(`${base()}/api/runs/${body.runId}/cancel`, { method: "POST" });
+    await fetch(`${base()}/api/runs/${body.runId}/cancel`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ confirm: true }),
+    });
     await awaitTerminal(body.runId);
     await awaitEvidence(body.runId);
 
@@ -418,7 +487,7 @@ describe("FIX 4 — apply rebuilds the ModelPort from the run's modelId, not the
     const record = localRegistry.register({
       runId: "fix4-run",
       fingerprint: "deadbeefcafef00d",
-      modelId: "claude-sonnet-x",
+      modelId: "example-chat-model",
       sink: new QueueEventSink(),
       cancel: (): void => undefined,
     });
@@ -436,6 +505,7 @@ describe("FIX 4 — apply rebuilds the ModelPort from the run's modelId, not the
       env: {},
       redactor: buildRedactor({}),
       registry: localRegistry,
+      store: createInMemoryUiStore(),
       modelPortFactory: (modelId): undefined => {
         seen.push(modelId);
         return undefined;
@@ -448,7 +518,7 @@ describe("FIX 4 — apply rebuilds the ModelPort from the run's modelId, not the
       url: new URL("http://127.0.0.1/api/runs/fix4-run/apply"),
     };
     await handleApplyRun(ctx, deps);
-    expect(seen).toEqual(["claude-sonnet-x"]);
+    expect(seen).toEqual(["example-chat-model"]);
     expect(seen).not.toContain(record.fingerprint);
   });
 });
@@ -461,7 +531,7 @@ describe("FIX B — apply snapshot retains the original limits from the dry-run"
     localRegistry.register({
       runId: "fixb-run",
       fingerprint: "fp-fixb",
-      modelId: "claude-sonnet-x",
+      modelId: "example-chat-model",
       sink: new QueueEventSink(),
       cancel: (): void => undefined,
     });
@@ -487,6 +557,7 @@ describe("FIX B — apply snapshot retains the original limits from the dry-run"
       env: {},
       redactor: buildRedactor({}),
       registry: localRegistry,
+      store: createInMemoryUiStore(),
       modelPortFactory: (): ModelPort => failingModel,
     };
     const ctx = {
@@ -498,6 +569,21 @@ describe("FIX B — apply snapshot retains the original limits from the dry-run"
     const result = await handleApplyRun(ctx, deps);
     // 200 = applyRun was invoked (workflow failure yields a report, not an HTTP error).
     expect(result.status).toBe(200);
+    const appliedRecord = localRegistry.get("fixb-run");
+    expect(appliedRecord?.appliable).toBeUndefined();
+    expect(appliedRecord?.applyReport).toBeDefined();
+
+    const getResult = handleGetRun(ctx, deps);
+    expect(getResult.status).toBe(200);
+    expect(getResult.body).toMatchObject({
+      report: {
+        status: "dry-run",
+        applyReport: { status: "failed" },
+      },
+    });
+
+    const second = await handleApplyRun(ctx, deps);
+    expect(second.status).toBe(409);
   });
 });
 
@@ -508,10 +594,95 @@ describe("FIX G/H — oversized request body returns 413 PAYLOAD_TOO_LARGE", () 
     const oversized = "x".repeat(1_000_001);
     const res = await fetch(`${base()}/api/runs`, {
       method: "POST",
+      headers: POST_JSON_HEADERS,
       body: oversized,
     });
     expect(res.status).toBe(413);
     const json = (await res.json()) as { error: { code: string } };
     expect(json).toMatchObject({ error: { code: "PAYLOAD_TOO_LARGE" } });
+  });
+});
+
+describe("Security #1 — workflow workspaceRoot project-allowlist check", () => {
+  it("returns 403 WORKSPACE_NOT_REGISTERED for verify with an unregistered workspaceRoot", async () => {
+    await start(fakeModel("noop"), { registerWorkspace: false });
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ taskType: "verify", input: { workspaceRoot: "/tmp/not-registered" }, modelId: "m" }),
+    });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json).toMatchObject({ error: { code: "WORKSPACE_NOT_REGISTERED" } });
+  });
+
+  it("returns 202 for verify with a registered workspaceRoot", async () => {
+    await start(fakeModel("noop"));
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ taskType: "verify", input: { workspaceRoot: workspace }, modelId: "m" }),
+    });
+    expect(res.status).toBe(202);
+  });
+
+  it("returns 202 for verify with a registered workspaceRoot even when no model provider is configured", async () => {
+    await start(fakeModel("noop"), { modelPortFactory: () => undefined });
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ taskType: "verify", input: { workspaceRoot: workspace }, modelId: "m" }),
+    });
+    expect(res.status).toBe(202);
+  });
+
+  it("returns 403 WORKSPACE_NOT_REGISTERED for unit-test-generation with an unregistered workspaceRoot", async () => {
+    await start(fakeModel(["```diff", TEST_DIFF.trimEnd(), "```"].join("\n")), {
+      registerWorkspace: false,
+    });
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        workflowId: "unit-test-generation",
+        input: { workspaceRoot: workspace, target: { kind: "file", filePath: "src/add.ts" } },
+        modelId: "test-model",
+      }),
+    });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json).toMatchObject({ error: { code: "WORKSPACE_NOT_REGISTERED" } });
+  });
+
+  it("returns 403 WORKSPACE_NOT_REGISTERED for bug-investigation with an unregistered workspaceRoot", async () => {
+    await start(fakeModel("investigation"), { registerWorkspace: false });
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        workflowId: "bug-investigation",
+        input: { report: { description: "bug" }, workspaceRoot: workspace },
+        modelId: "m",
+      }),
+    });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json).toMatchObject({ error: { code: "WORKSPACE_NOT_REGISTERED" } });
+  });
+
+  it("returns 403 WORKSPACE_NOT_REGISTERED for explain-plan with an unregistered workspaceRoot", async () => {
+    await start(fakeModel("an explanation"), { registerWorkspace: false });
+    const res = await fetch(`${base()}/api/runs`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        taskType: "explain-plan",
+        input: { filePath: "src/add.ts", workspaceRoot: workspace },
+        modelId: "m",
+      }),
+    });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json).toMatchObject({ error: { code: "WORKSPACE_NOT_REGISTERED" } });
   });
 });

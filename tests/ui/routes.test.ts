@@ -7,6 +7,7 @@ import {
   type RouteContext,
 } from "../../src/ui/routes.js";
 import { buildRedactor, createRunRegistry, type UiHandlerDeps } from "../../src/ui/index.js";
+import { createInMemoryUiStore } from "../../src/ui/store/index.js";
 import { SDK_VERSION } from "../../src/sdk/index.js";
 
 const emptyCtx: RouteContext = {
@@ -24,16 +25,103 @@ const stubDeps: UiHandlerDeps = {
   redactor: buildRedactor({}),
   registry: createRunRegistry(),
   modelPortFactory: () => undefined,
+  store: createInMemoryUiStore(),
 };
 
 describe("API route contract", () => {
-  it("declares the eleven D5 routes", () => {
-    expect(API_ROUTES).toHaveLength(11);
+  it("declares the 44 route contract (ADR-0017 browser + ADR-0018 terminal + first-run gateway setup)", () => {
+    expect(API_ROUTES).toHaveLength(44);
+  });
+
+  it("includes the first-run gateway setup route", () => {
+    expect(
+      API_ROUTES.find((r) => r.method === "POST" && r.pattern === "/api/gateway/setup"),
+    ).toBeDefined();
+  });
+
+  it("includes the 8 browser-tool routes (#76)", () => {
+    const browserRoutes = API_ROUTES.filter((r) => r.pattern.startsWith("/api/browser"));
+    expect(browserRoutes).toHaveLength(8);
+    expect(browserRoutes.find((r) => r.method === "GET" && r.pattern === "/api/browser/status")).toBeDefined();
+    expect(
+      browserRoutes.find(
+        (r) => r.method === "GET" && r.pattern === "/api/browser/sessions/:sessionId/events",
+      ),
+    ).toBeDefined();
+  });
+
+  it("includes the run-summary message routes (#66)", () => {
+    const patchRoute = API_ROUTES.find(
+      (r) => r.method === "PATCH" && r.pattern === "/api/chats/messages",
+    );
+    const pairRoute = API_ROUTES.find(
+      (r) => r.method === "POST" && r.pattern === "/api/chats/messages/run-summary-pair",
+    );
+    expect(patchRoute).toBeDefined();
+    expect(pairRoute).toBeDefined();
+  });
+
+  it("includes the composer chat-run route (#66)", () => {
+    const route = API_ROUTES.find((r) => r.method === "POST" && r.pattern === "/api/chats/runs");
+    expect(route).toBeDefined();
+  });
+
+  it("includes the desktop GPT chat routes", () => {
+    expect(
+      API_ROUTES.find((r) => r.method === "POST" && r.pattern === "/api/desktop/chats"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "POST" && r.pattern === "/api/desktop/chat"),
+    ).toBeDefined();
+  });
+
+  it("includes the ADR-0018 terminal tool routes (no PTY surface)", () => {
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/terminal/policy"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/terminal/directories"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "POST" && r.pattern === "/api/terminal/executions"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find(
+        (r) =>
+          r.method === "DELETE" && r.pattern === "/api/terminal/executions/:executionId",
+      ),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/terminal/events"),
+    ).toBeDefined();
+    // PTY routes must be gone.
+    expect(
+      API_ROUTES.find((r) => r.pattern === "/api/terminal/shells"),
+    ).toBeUndefined();
+    expect(
+      API_ROUTES.find((r) => r.pattern === "/api/terminal/sessions"),
+    ).toBeUndefined();
+  });
+
+  it("includes the desktop files read-only routes", () => {
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/files/directories"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/files/tree"),
+    ).toBeDefined();
+    expect(
+      API_ROUTES.find((r) => r.method === "GET" && r.pattern === "/api/files/preview"),
+    ).toBeDefined();
   });
 
   it("exposes every contract path exactly once per method", () => {
     const keys = API_ROUTES.map((r) => `${r.method} ${r.pattern}`);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("includes the workspace summary route", () => {
+    expect(API_ROUTES.some((route) => route.pattern === "/api/workspace")).toBe(true);
   });
 });
 
