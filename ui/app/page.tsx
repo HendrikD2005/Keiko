@@ -1,1 +1,1 @@
-export { default } from "./home/HomePage";
+export { KeikoDesktop as default } from "@/app/components/desktop/KeikoDesktop";
