@@ -1,10 +1,11 @@
-// Package-surface verification (ADR-0011 D6). Asserts the publish tarball ships the UI assets and
-// nothing it must not: no source maps, no `.env`, no `ui/` source, and no absolute local paths in
-// the file list. Run from `prepack`/`prepublishOnly` after the build steps.
+// Package-surface verification (ADR-0011 D6). Asserts the publish tarball ships the UI assets,
+// exposes an executable CLI bin, and includes nothing it must not: no source maps, no `.env`,
+// no `ui/` source, and no absolute local paths in the file list. Run from `prepack`/`prepublishOnly`
+// after the build steps.
 
 import { spawnSync } from "node:child_process";
 
-function packFileList() {
+function packFiles() {
   // `--ignore-scripts` prevents the prepack hook from re-running this check recursively (npm runs
   // prepack on `npm pack`); the build steps already ran before this check in the prepack chain.
   const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
@@ -15,8 +16,7 @@ function packFileList() {
   }
   const parsed = JSON.parse(result.stdout);
   const entry = Array.isArray(parsed) ? parsed[0] : parsed;
-  const files = entry?.files ?? [];
-  return files.map((f) => f.path);
+  return entry?.files ?? [];
 }
 
 function fail(message) {
@@ -24,7 +24,8 @@ function fail(message) {
   process.exit(1);
 }
 
-const paths = packFileList();
+const files = packFiles();
+const paths = files.map((f) => f.path);
 
 if (!paths.some((p) => p.startsWith("dist/ui/static/"))) {
   fail("the tarball does not include dist/ui/static (run `npm run build:ui`).");
@@ -40,6 +41,15 @@ if (!paths.includes("NOTICE")) {
 
 if (!paths.includes("TRADEMARKS.md")) {
   fail("the tarball does not include TRADEMARKS.md.");
+}
+
+const cliBin = files.find((file) => file.path === "dist/cli/index.js");
+if (cliBin === undefined) {
+  fail("the tarball does not include dist/cli/index.js.");
+}
+
+if ((cliBin.mode & 0o111) === 0) {
+  fail("dist/cli/index.js is not executable in the tarball (run `npm run prepare:bin`).");
 }
 
 const forbidden = [

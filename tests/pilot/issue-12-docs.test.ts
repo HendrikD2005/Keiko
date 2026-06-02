@@ -16,6 +16,7 @@ function readPackageJson(): { scripts: Record<string, string> } {
 const PACKAGE_SURFACE_CHAIN = [
   "npm run clean",
   "npm run build",
+  "npm run prepare:bin",
   "npm run ui:ci",
   "npm run build:ui",
   "npm run check:package-surface",

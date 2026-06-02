@@ -1,6 +1,6 @@
 {
   "name": "@oscharko-dev/keiko",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "Enterprise model-agnostic developer-assist coding agent for regulated engineering workflows.",
   "type": "module",
   "license": "Apache-2.0",
@@ -34,10 +34,11 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "ui:ci": "npm --prefix ui ci --ignore-scripts",
+    "prepare:bin": "node scripts/ensure-bin-mode.mjs",
     "build:ui": "node scripts/build-ui.mjs",
     "check:package-surface": "node scripts/check-package-surface.mjs",
-    "prepack": "npm run clean && npm run build && npm run ui:ci && npm run build:ui && npm run check:package-surface",
-    "prepublishOnly": "npm run clean && npm run build && npm run ui:ci && npm run build:ui && npm run check:package-surface",
+    "prepack": "npm run clean && npm run build && npm run prepare:bin && npm run ui:ci && npm run build:ui && npm run check:package-surface",
+    "prepublishOnly": "npm run clean && npm run build && npm run prepare:bin && npm run ui:ci && npm run build:ui && npm run check:package-surface",
     "clean": "rm -rf dist coverage"
   },
   "devDependencies": {
