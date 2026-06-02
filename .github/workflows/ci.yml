@@ -9,13 +9,26 @@ on:
 permissions: {}
 
 jobs:
+  main-dev-gate:
+    name: Only dev may merge to main
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Confirm dev branch gate
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/dev" ] && [ "${{ github.base_ref }}" != "dev" ]; then
+            echo "This gate is only valid for the protected dev branch."
+            exit 1
+          fi
+          echo "Protected dev branch gate satisfied."
+
   ci:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22.x"
           cache: "npm"
@@ -30,7 +43,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Download and verify actionlint
         run: |
           curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz" -o actionlint.tar.gz
@@ -46,7 +59,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Assert all action references are pinned to 40-hex SHAs
         run: |
           set -euo pipefail
@@ -67,8 +80,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22.x"
           cache: "npm"
@@ -93,7 +106,7 @@ jobs:
           if [ "$code" -ne 2 ]; then echo "expected exit 2, got $code"; exit 1; fi
           echo "unknown-command exit code correct: $code"
       - name: Upload SBOM
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
@@ -105,20 +118,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22.x"
           cache: "npm"
           cache-dependency-path: ui/package-lock.json
       - name: Install UI dependencies
-        run: npm --prefix ui ci
+        run: npm --prefix ui ci --ignore-scripts
+      - name: Security audit UI dependencies (moderate and above)
+        run: npm --prefix ui audit --audit-level=moderate
       - name: Lint UI
         run: npm --prefix ui run lint
       - name: Typecheck UI
         run: npm --prefix ui run typecheck
       - name: Build UI (static export)
         run: npm --prefix ui run build
+      - name: Generate UI CycloneDX SBOM
+        run: npm --prefix ui sbom --sbom-format cyclonedx --omit dev > ui-sbom.cdx.json
       - name: Test UI (jsdom + axe a11y)
         run: npm --prefix ui run test
       - name: Install root dependencies
@@ -127,6 +144,8 @@ jobs:
         run: |
           npm run build
           npm run build:ui
+      - name: Verify package surface
+        run: npm run check:package-surface
       - name: Smoke - keiko ui serves /api/health
         run: |
           set -euo pipefail
@@ -136,3 +155,9 @@ jobs:
           body=$(curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:4399/api/health)
           echo "health: $body"
           echo "$body" | grep -q '"status":"ok"'
+      - name: Upload UI SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-sbom-cyclonedx
+          path: ui-sbom.cdx.json
+          retention-days: 90
