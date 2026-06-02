@@ -51,11 +51,23 @@ function pickScript(
   }
   for (const name of names) {
     const lower = name.toLowerCase();
-    if (contains.some((needle) => lower.includes(needle))) {
+    if (
+      contains.some((needle) => lower.includes(needle)) &&
+      !contains.some((needle) => isLifecycleWrapper(lower, needle))
+    ) {
       return name;
     }
   }
   return undefined;
+}
+
+function isLifecycleWrapper(lowerName: string, needle: string): boolean {
+  return (
+    lowerName === `pre${needle}` ||
+    lowerName === `post${needle}` ||
+    lowerName.startsWith(`pre${needle}:`) ||
+    lowerName.startsWith(`post${needle}:`)
+  );
 }
 
 // Maps script names to verification kinds via conventional heuristics. Exact-name matches win;
@@ -72,7 +84,7 @@ export function classifyScripts(scripts: Readonly<Record<string, string>>): Scri
 }
 
 export function detectScripts(workspace: WorkspaceInfo, fs?: WorkspaceFs): ScriptCatalog {
-  let scripts: Readonly<Record<string, string>> = {};
+  let scripts: Readonly<Record<string, string>>;
   try {
     const content = readWorkspaceFile(
       workspace,
