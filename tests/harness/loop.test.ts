@@ -94,6 +94,27 @@ describe("runLoop — task-type routing", () => {
     expect(types).toContain("tool:call:completed");
     expect(ctx.patchDiff).toContain("+fix");
   });
+
+  it("preserves assistant tool calls and tool_call_id for the follow-up model turn", async () => {
+    const firstToolCall = toolCall("t1");
+    const scripted = scriptedModel([
+      response({ finishReason: "tool_calls", toolCalls: [firstToolCall] }),
+      response({ content: "--- a/x\n+++ b/x\n+fix" }),
+    ]);
+    const tool = recordingTool([{ name: "read_file", description: "read", parameters: {} }]);
+    const { ctx } = buildContext({ task: INVESTIGATE, model: scripted.port, tools: tool.port });
+    await runLoop(ctx);
+    const secondRequest = scripted.requests()[1];
+    expect(secondRequest?.messages.at(-2)).toMatchObject({
+      role: "assistant",
+      toolCalls: [firstToolCall],
+    });
+    expect(secondRequest?.messages.at(-1)).toMatchObject({
+      role: "tool",
+      toolCallId: "t1",
+      content: "tool output",
+    });
+  });
 });
 
 describe("runLoop — cancellation", () => {
@@ -259,6 +280,39 @@ describe("runLoop — limit breaches each map to their category", () => {
     expect(failureCategory(sink.events())).toBe("HARNESS_LIMIT_COMMAND_EXECUTIONS");
   });
 
+  it("maxCommandExecutions blocks a second command in the same tool-call batch", async () => {
+    const { port } = scriptedModel([
+      response({
+        finishReason: "tool_calls",
+        toolCalls: [toolCall("t1", "run_command"), toolCall("t2", "run_command")],
+      }),
+      response({ content: "should not run" }),
+    ]);
+    const seen: string[] = [];
+    const commandTool: import("../../src/harness/ports.js").ToolPort = {
+      execute: (req) => {
+        seen.push(req.toolCallId);
+        return Promise.resolve({
+          toolCallId: req.toolCallId,
+          output: "ran",
+          durationMs: 0,
+          commandExecuted: true,
+        });
+      },
+      listTools: () => [{ name: "run_command", description: "run", parameters: {} }],
+    };
+    const { ctx, sink } = buildContext({
+      task: INVESTIGATE,
+      model: port,
+      tools: commandTool,
+      limits: { maxCommandExecutions: 1 },
+    });
+    const outcome = await runLoop(ctx);
+    expect(outcome).toBe("limit-exceeded");
+    expect(failureCategory(sink.events())).toBe("HARNESS_LIMIT_COMMAND_EXECUTIONS");
+    expect(seen).toEqual(["t1"]);
+  });
+
   it("commandExecuted:false never trips maxCommandExecutions", async () => {
     const { port } = scriptedModel([
       response({ finishReason: "tool_calls", toolCalls: [toolCall("t1", "read_file")] }),
@@ -293,6 +347,55 @@ describe("runLoop — limit breaches each map to their category", () => {
     const outcome = await runLoop(ctx);
     expect(outcome).toBe("failed");
     expect(failureCategory(sink.events())).toBe("HARNESS_MODEL_ERROR");
+  });
+
+  it("tool execution error -> failed with HARNESS_TOOL_ERROR", async () => {
+    const { port } = scriptedModel([
+      response({ finishReason: "tool_calls", toolCalls: [toolCall("t1")] }),
+      response({ content: "should not run" }),
+    ]);
+    const failingTool: import("../../src/harness/ports.js").ToolPort = {
+      execute: () => Promise.reject(new Error("tool exploded")),
+      listTools: () => [{ name: "read_file", description: "read", parameters: {} }],
+    };
+    const { ctx, sink } = buildContext({ task: INVESTIGATE, model: port, tools: failingTool });
+    const outcome = await runLoop(ctx);
+    expect(outcome).toBe("failed");
+    expect(failureCategory(sink.events())).toBe("HARNESS_TOOL_ERROR");
+  });
+
+  it("aborts between tool calls in a multi-tool batch", async () => {
+    const controller = new AbortController();
+    const { port } = scriptedModel([
+      response({
+        finishReason: "tool_calls",
+        toolCalls: [toolCall("t1"), toolCall("t2")],
+      }),
+      response({ content: "should not run" }),
+    ]);
+    const seen: string[] = [];
+    const abortingTool: import("../../src/harness/ports.js").ToolPort = {
+      execute: (req) => {
+        seen.push(req.toolCallId);
+        controller.abort("after first tool");
+        return Promise.resolve({ toolCallId: req.toolCallId, output: "content", durationMs: 0 });
+      },
+      listTools: () => [{ name: "read_file", description: "read", parameters: {} }],
+    };
+    const { ctx, sink } = buildContext({
+      task: INVESTIGATE,
+      model: port,
+      tools: abortingTool,
+      signal: controller.signal,
+    });
+    const outcome = await runLoop(ctx);
+    expect(outcome).toBe("cancelled");
+    expect(seen).toEqual(["t1"]);
+    const cancelled = sink.events().find((e) => e.type === "run:cancelled");
+    expect(cancelled?.type).toBe("run:cancelled");
+    if (cancelled?.type === "run:cancelled") {
+      expect(cancelled.atState).toBe("tool-call");
+    }
   });
 
   it("context limit after tool-call -> HARNESS_LIMIT_CONTEXT_SIZE on second model-call entry", async () => {

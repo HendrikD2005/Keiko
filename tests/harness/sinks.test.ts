@@ -61,6 +61,23 @@ function commandExecutedEvent(): HarnessEvent {
   };
 }
 
+function sandboxConfiguredEvent(): HarnessEvent {
+  return {
+    schemaVersion: "1",
+    runId: "run-1",
+    fingerprint: "fp",
+    seq: 6,
+    ts: 6,
+    type: "sandbox:configured",
+    envAllowlist: ["PATH", "TZ"],
+    network: "inherit",
+    maxOutputBytes: 1_024,
+    timeoutMs: 500,
+    terminationGraceMs: 50,
+    cwdRequested: true,
+  };
+}
+
 function patchAppliedEvent(): HarnessEvent {
   return {
     schemaVersion: "1",
@@ -89,11 +106,13 @@ describe("MemoryEventSink", () => {
     const manifest = sink.collectManifest({
       runId: "run-1",
       fingerprint: "fp",
-      harnessVersion: "0.1.0",
+      harnessVersion: "0.1.0-beta.2",
       taskType: "explain-plan",
       taskInput: { taskType: "explain-plan", input: { filePath: "src/foo.ts" } },
       limits: DEFAULT_LIMITS,
       modelId: "m",
+      workingDirectory: "/repo",
+      dryRun: true,
       startedAt: "2026-05-28T00:00:00.000Z",
     });
     expect(manifest.runId).toBe("run-1");
@@ -156,6 +175,23 @@ describe("CliEventSink", () => {
     expect(joined).toContain("command:executed");
     expect(joined).toContain("node");
     expect(joined).toContain("exit=0");
+  });
+
+  it("summarises sandbox:configured with names and limits only", () => {
+    const lines: string[] = [];
+    const sink = new CliEventSink({
+      out: (t): void => {
+        lines.push(t);
+      },
+      err: (): void => undefined,
+    });
+    sink.emit(sandboxConfiguredEvent());
+    const joined = lines.join("");
+    expect(joined).toContain("sandbox:configured");
+    expect(joined).toContain("env=PATH,TZ");
+    expect(joined).toContain("network=inherit");
+    expect(joined).toContain("cwdRequested=true");
+    expect(joined).not.toContain("SECRET");
   });
 
   it("summarises patch:applied with file counts only (no paths or contents)", () => {

@@ -21,13 +21,37 @@ import { DEFAULT_LIMITS, type HarnessLimits, type TaskInput } from "../../src/ha
 
 export function stubClock(start = 0): { clock: Clock; set: (ms: number) => void } {
   let current = start;
+  const pendingSleeps = new Set<() => void>();
   return {
     set: (ms: number): void => {
       current = ms;
+      for (const resolve of pendingSleeps) {
+        resolve();
+      }
+      pendingSleeps.clear();
     },
     clock: {
       now: (): number => current,
-      sleep: (): Promise<void> => Promise.resolve(),
+      sleep: (_ms: number, signal?: AbortSignal): Promise<void> =>
+        new Promise((resolve, reject) => {
+          if (signal?.aborted === true) {
+            reject(new Error("aborted"));
+            return;
+          }
+          const finish = (): void => {
+            pendingSleeps.delete(finish);
+            resolve();
+          };
+          pendingSleeps.add(finish);
+          signal?.addEventListener(
+            "abort",
+            () => {
+              pendingSleeps.delete(finish);
+              reject(new Error("aborted"));
+            },
+            { once: true },
+          );
+        }),
     },
   };
 }
@@ -52,12 +76,16 @@ export function toolCall(id: string, name = "read_file"): NormalizedToolCall {
 export function scriptedModel(script: readonly (NormalizedResponse | Error)[]): {
   port: ModelPort;
   calls: () => number;
+  requests: () => readonly Parameters<ModelPort["call"]>[0][];
 } {
   let i = 0;
+  const requests: Parameters<ModelPort["call"]>[0][] = [];
   return {
     calls: (): number => i,
+    requests: (): readonly Parameters<ModelPort["call"]>[0][] => requests,
     port: {
-      call: (): Promise<NormalizedResponse> => {
+      call: (request): Promise<NormalizedResponse> => {
+        requests.push(request);
         const item = script[Math.min(i, script.length - 1)];
         i += 1;
         if (item instanceof Error) {
@@ -124,6 +152,7 @@ export function buildContext(options: CtxOptions): { ctx: RunContext; sink: Memo
     report: undefined,
     failure: undefined,
     cancelReason: undefined,
+    cancelledAtState: undefined,
   };
   return { ctx, sink };
 }

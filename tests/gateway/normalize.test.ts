@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MalformedToolCallError } from "../../src/gateway/errors.js";
+import { MalformedToolCallError, ModelRefusalError } from "../../src/gateway/errors.js";
 import { normalizeChatResponse } from "../../src/gateway/normalize.js";
 
 const BASE_USAGE = { requestId: "req-1", latencyMs: 12, costClass: "medium" } as const;
@@ -19,10 +19,10 @@ function chatPayload(overrides: Record<string, unknown> = {}): unknown {
 
 describe("normalizeChatResponse", () => {
   it("normalises a well-formed chat response with populated usage", () => {
-    const result = normalizeChatResponse(chatPayload(), "gpt-oss-120b", BASE_USAGE);
+    const result = normalizeChatResponse(chatPayload(), "example-chat-model", BASE_USAGE);
     expect(result.content).toBe("hello there");
     expect(result.finishReason).toBe("stop");
-    expect(result.modelId).toBe("gpt-oss-120b");
+    expect(result.modelId).toBe("example-chat-model");
     expect(result.usage.promptTokens).toBe(10);
     expect(result.usage.completionTokens).toBe(5);
     expect(result.usage.requestId).toBe("req-1");
@@ -48,7 +48,7 @@ describe("normalizeChatResponse", () => {
         },
       ],
     });
-    const result = normalizeChatResponse(payload, "gpt-oss-120b", BASE_USAGE);
+    const result = normalizeChatResponse(payload, "example-chat-model", BASE_USAGE);
     expect(result.finishReason).toBe("tool_calls");
     expect(result.content).toBe("");
     expect(result.toolCalls).toHaveLength(1);
@@ -65,7 +65,7 @@ describe("normalizeChatResponse", () => {
         },
       ],
     });
-    const result = normalizeChatResponse(payload, "gpt-oss-120b", BASE_USAGE, true);
+    const result = normalizeChatResponse(payload, "example-chat-model", BASE_USAGE, true);
     expect(result.structuredOutput).toEqual({ answer: 42 });
   });
 
@@ -132,6 +132,20 @@ describe("normalizeChatResponse", () => {
       choices: [{ message: { role: "assistant", content: "x" }, finish_reason: "length" }],
     });
     expect(normalizeChatResponse(payload, "m", BASE_USAGE).finishReason).toBe("length");
+  });
+
+  it("throws ModelRefusalError for a provider refusal field", () => {
+    const payload = chatPayload({
+      choices: [{ message: { role: "assistant", content: "", refusal: "I cannot comply" } }],
+    });
+    expect(() => normalizeChatResponse(payload, "m", BASE_USAGE)).toThrow(ModelRefusalError);
+  });
+
+  it("throws ModelRefusalError for content_filter finish_reason", () => {
+    const payload = chatPayload({
+      choices: [{ message: { role: "assistant", content: "" }, finish_reason: "content_filter" }],
+    });
+    expect(() => normalizeChatResponse(payload, "m", BASE_USAGE)).toThrow(ModelRefusalError);
   });
 
   it("returns empty content when the provider omits the choices array", () => {
