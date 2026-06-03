@@ -1,6 +1,7 @@
-// Re-export shim: the workspace error taxonomy now lives in @oscharko-dev/keiko-security
-// (issue #159, ADR-0019). All existing import sites (`from "./errors.js"`) keep resolving
-// unchanged via this barrel.
+// Re-export shim: the workspace error taxonomy is owned by @oscharko-dev/keiko-security and
+// re-exported through @oscharko-dev/keiko-workspace (issues #159, #161). Routing this shim
+// through keiko-workspace keeps the legacy `from "./errors.js"` import paths resolving for
+// callers that have not yet been migrated to the absolute package surface.
 
 export {
   WORKSPACE_CODES,
@@ -10,5 +11,5 @@ export {
   WorkspaceNotFoundError,
   FileTooLargeError,
   WorkspaceReadError,
-} from "@oscharko-dev/keiko-security/errors/workspace";
-export type { WorkspaceCode } from "@oscharko-dev/keiko-security/errors/workspace";
+} from "@oscharko-dev/keiko-workspace";
+export type { WorkspaceCode } from "@oscharko-dev/keiko-workspace";
