@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aggregateUsage, resolveCostClass } from "../../src/audit/aggregate.js";
-import type { HarnessEvent } from "../../src/harness/types.js";
+import { aggregateUsage } from "./aggregate.js";
+import type { HarnessEvent } from "@oscharko-dev/keiko-contracts";
 
 function modelCompleted(
   seq: number,
@@ -67,12 +67,6 @@ describe("aggregateUsage", () => {
   });
 });
 
-describe("resolveCostClass", () => {
-  it("returns 'unknown' when no built-in registry model is shipped", () => {
-    expect(resolveCostClass("example-chat-model")).toBe("unknown");
-  });
-
-  it("returns 'unknown' for an unregistered model id", () => {
-    expect(resolveCostClass("no-such-model-xyz")).toBe("unknown");
-  });
-});
+// resolveCostClass moved to @oscharko-dev/keiko-model-gateway in issue #163 — its tests live at
+// packages/keiko-model-gateway/src/capabilities.test.ts (registry behaviour) and
+// packages/keiko-model-gateway/src/index.test.ts (public surface pin).
