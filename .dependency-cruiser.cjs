@@ -242,16 +242,58 @@ module.exports = {
     {
       name: "adr-0019-direction-5-workflows-scope",
       comment:
-        "ADR-0019 direction rule 5: keiko-workflows may depend only on contracts, security, " +
-        "model-gateway, workspace, tools, harness, evidence. Imports from server, cli, or ui " +
-        "are forbidden.",
+        "ADR-0019 direction rule 5 (base safety net): keiko-workflows may depend only on " +
+        "contracts, security, model-gateway, workspace, tools, harness, evidence. Imports " +
+        "from server, cli, or ui are forbidden. After issue #165 the strict variant " +
+        "adr-0019-direction-5a-* fires at error severity for the same scope; this rule stays " +
+        "as a warn-level safety net so a regression that slips past the strict variant (e.g. " +
+        "a future import target the strict regex misses) still surfaces in dep-cruiser output.",
       severity: "warn",
-      from: { path: "^(packages/keiko-workflows/src/|src/workflows/)" },
+      from: { path: "^packages/keiko-workflows/src/" },
       to: {
         path:
           "^(packages/keiko-(server|cli|ui)/|" +
           "node_modules/@oscharko-dev/keiko-(server|cli|ui)|" +
           "src/(cli|ui))",
+      },
+    },
+    {
+      name: "adr-0019-direction-5a-workflows-only-contracts-security-model-gateway-workspace-tools-harness-evidence",
+      comment:
+        "ADR-0019 direction rule 5 (workflows strict variant): keiko-workflows and the " +
+        "src/workflows/ shims may depend on keiko-contracts, keiko-security, " +
+        "keiko-model-gateway, keiko-workspace, keiko-tools, keiko-harness, and " +
+        "keiko-evidence only, and must reach those allowed dependencies through their " +
+        "public package surfaces (`@oscharko-dev/keiko-<name>`) — NOT by deep-importing " +
+        "the legacy `src/<name>/` shim layers. The to.path therefore forbids both the " +
+        "non-allow-listed siblings (`cli|ui|evaluations`) AND the allow-listed siblings' " +
+        "src/ shim paths (`gateway|workspace|tools|harness|audit`); the latter group " +
+        "appears in the package allow-list above but their `src/` shim copies are " +
+        "implementation detail and must not be reached directly (boundary-weakening gap " +
+        "pattern from issue #160 — Copilot finding on issue #165). Promoted to error " +
+        "severity by issue #165 because the workflows package physically exists. Also " +
+        "fires on the negative-test fixture under tests/architecture/fixtures/workflows/ " +
+        "so the gate can be proven live by scripts/arch-check-negative.mjs. pathNot only " +
+        "filters self-references via the src/workflows/ shim path; it must NOT silently " +
+        "exclude sibling-but-still-in-src/ domains (same #160/#162 memory lesson). " +
+        "src/verification/ is intentionally NOT in the forbidden list: workflows depends " +
+        "on the verification orchestrator (apply-mode verification per ADR-0008 D5) and " +
+        "verification is not yet a physical package — the boundary will be re-evaluated " +
+        "when verification is extracted in a future issue.",
+      severity: "error",
+      from: {
+        path:
+          "^(packages/keiko-workflows/src/|" +
+          "src/workflows/|" +
+          "tests/architecture/fixtures/workflows/)",
+      },
+      to: {
+        path:
+          "^((\\.\\./)*packages/keiko-(?!contracts|security|model-gateway|workspace|tools|harness|workflows|evidence)|" +
+          "node_modules/@oscharko-dev/keiko-(?!contracts|security|model-gateway|workspace|tools|harness|workflows|evidence)|" +
+          "@oscharko-dev/keiko-(?!contracts|security|model-gateway|workspace|tools|harness|workflows|evidence)|" +
+          "src/(cli|ui|evaluations|gateway|workspace|tools|harness|audit))",
+        pathNot: "^src/workflows/",
       },
     },
     {
