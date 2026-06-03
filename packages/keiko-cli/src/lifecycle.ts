@@ -10,9 +10,9 @@ import {
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { EnvSource } from "../gateway/config.js";
-import { SDK_VERSION } from "../sdk/index.js";
-import { DEFAULT_UI_PORT, UI_HOST } from "../ui/index.js";
+import type { EnvSource } from "@oscharko-dev/keiko-model-gateway";
+import { SDK_VERSION } from "./_sdk-version.js";
+import { DEFAULT_UI_PORT, UI_HOST } from "@oscharko-dev/keiko-server";
 import type { CliIo } from "./runner.js";
 
 type LifecycleCommand = "start" | "stop" | "status" | "restart";
@@ -268,6 +268,13 @@ function childEnv(env: EnvSource): NodeJS.ProcessEnv {
 }
 
 function cliEntryPath(): string {
+  // The root bin shim (`dist/cli/index.js`) surfaces `KEIKO_CLI_BIN_PATH` so
+  // re-exec'd children spawned by `keiko start` invoke the published bin rather
+  // than the cli package barrel (which is not executable). The
+  // import.meta.url fallback preserves the pre-extraction behaviour for callers
+  // that invoke runLifecycleCli without going through the bin shim.
+  const fromEnv = process.env.KEIKO_CLI_BIN_PATH;
+  if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
   return join(dirname(fileURLToPath(import.meta.url)), "index.js");
 }
 
