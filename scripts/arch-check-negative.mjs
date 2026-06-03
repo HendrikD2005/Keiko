@@ -1,13 +1,16 @@
 // Negative architecture-gate test (ADR-0020 D5).
 //
-// Runs dependency-cruiser against the intentional-violation fixture under
-// tests/architecture/fixtures and ASSERTS A NON-ZERO EXIT CODE. The script exits 0
-// on assertion success (the gate fired as expected) and 1 on assertion failure (the
-// gate stayed silent — the gate is broken).
+// Runs dependency-cruiser against the intentional-violation fixtures under
+// tests/architecture/fixtures and ASSERTS:
+//   (a) a non-zero exit code (the gate fired); and
+//   (b) every expected rule name appears in stdout, exactly once per fixture, so each
+//       physically-extracted package boundary is proven live by name (not just by exit code).
+//
+// Exits 0 on assertion success, 1 on assertion failure.
 //
 // `--include-only` here overrides the production config's includeOnly (which scopes
 // the production scan to ^(src|packages/[^/]+/src)). The override is a strict superset:
-// it covers the fixture file itself, its unresolved relative import target (`../`-form,
+// it covers the fixture files themselves, their unresolved relative import targets (`../`-form,
 // emitted when the target package does not yet exist on disk), AND the production
 // includeOnly so that once a future PR creates the target package, dependency-cruiser
 // still resolves the import to a `packages/...` path that stays inside the scan.
@@ -17,6 +20,14 @@ import { spawnSync } from "node:child_process";
 const RULES_FILE = ".dependency-cruiser.cjs";
 const FIXTURE_PATH = "tests/architecture/fixtures";
 const INCLUDE_ONLY_OVERRIDE = "^(tests/architecture/fixtures|\\.\\./|src|packages/[^/]+/src)";
+
+// One expected rule per physically-extracted package boundary. Each rule should fire EXACTLY ONCE
+// against its dedicated fixture subdir, so the assertion is "name appears, exit non-zero". Add a
+// new entry whenever a new boundary lands a fixture under tests/architecture/fixtures/<name>/.
+const EXPECTED_RULES = [
+  "adr-0019-direction-1-contracts-leaf",
+  "adr-0019-direction-2-security-only-contracts",
+];
 
 // `npx --no-install` keeps CI hermetic by refusing to fetch from the registry when the
 // local devDependency is missing. dependency-cruiser is a root devDependency, so npm
@@ -40,23 +51,54 @@ if (result.status === null) {
   process.exit(1);
 }
 
-// dependency-cruiser exits 1 specifically when validation rules fire on the input. Exit 2 (and
-// other non-zero codes) signal internal errors — bad config, missing files, parse failures —
-// which must NOT be accepted as a successful gate-fired result. Asserting exactly 1 keeps the
-// negative test honest if dep-cruiser's config loader breaks in a future release.
-if (result.status !== 1) {
+// dependency-cruiser exits 0 when no rules fired and a positive integer equal to the error count
+// otherwise. Asserting non-zero guards against a silent gate; per-rule string assertions below
+// guard against the wrong rule firing or a rule disappearing entirely.
+if (result.status === 0) {
   console.error(
-    `arch-check-negative: FAIL — expected dep-cruiser exit 1 (rule fired), got ${String(result.status)}.`,
+    "arch-check-negative: FAIL — expected dep-cruiser to report violations, got exit 0.",
   );
+  console.error("  Stdout:", result.stdout);
+  console.error("  Stderr:", result.stderr);
+  process.exit(1);
+}
+
+const stdout = result.stdout;
+
+// Count rule firings per expected name. Each rule must fire EXACTLY ONCE in this run: each
+// fixture subdir is tightly scoped to one rule via its `from.path` in .dependency-cruiser.cjs, so
+// a second firing would indicate either a fixture leak across subdirs or a duplicate report.
+// `includes()` alone would silently accept duplicates and drift the gate over time.
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at === -1) return count;
+    count += 1;
+    from = at + needle.length;
+  }
+}
+
+const wrong = EXPECTED_RULES.map((rule) => ({
+  rule,
+  count: countOccurrences(stdout, rule),
+})).filter((entry) => entry.count !== 1);
+if (wrong.length > 0) {
+  for (const { rule, count } of wrong) {
+    console.error(
+      `arch-check-negative: FAIL — rule \`${rule}\` fired ${String(count)} times (expected 1).`,
+    );
+  }
   console.error("  Stdout:");
-  console.error(result.stdout);
+  console.error(stdout);
   console.error("  Stderr:");
   console.error(result.stderr);
   process.exit(1);
 }
 
-console.log("arch-check-negative: PASS — gate fired on fixture as expected (exit 1).");
-if (result.stdout.trim().length > 0) {
-  console.log(result.stdout.trim());
-}
+console.log(
+  `arch-check-negative: PASS — gate fired on ${String(EXPECTED_RULES.length)} fixture(s) as expected.`,
+);
+console.log(stdout.trim());
 process.exit(0);
