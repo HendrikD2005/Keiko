@@ -1,8 +1,6 @@
 // Re-export shim: harness contract types live in @oscharko-dev/keiko-contracts (issue #158).
 // `verbatimModuleSyntax` is on, so type-only names use `export type` and value-emitting frozen
-// tables use `export`. This shim is independent of the @oscharko-dev/keiko-harness extraction
-// (issue #164): contracts has been the canonical source of these types since issue #158, and the
-// direct-from-contracts form keeps the type graph shallow for downstream consumers.
+// tables use `export`.
 
 export type {
   HarnessStateName,
