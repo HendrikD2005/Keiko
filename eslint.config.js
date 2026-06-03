@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "**/dist/**",
       "coverage/**",
       "node_modules/**",
       "ui/**",
@@ -15,6 +16,7 @@ export default tseslint.config(
       "sandbox/**",
       "only-for-internal-use/**",
       "Only for Internal Use/**",
+      "tests/architecture/fixtures/**",
     ],
   },
   js.configs.recommended,
@@ -34,7 +36,18 @@ export default tseslint.config(
     },
   },
   { files: ["**/*.test.ts"], rules: { "max-lines-per-function": "off" } },
-  { files: ["**/*.js"], ...tseslint.configs.disableTypeChecked },
+  { files: ["**/*.{js,cjs}"], ...tseslint.configs.disableTypeChecked },
+  {
+    files: ["**/*.cjs"],
+    languageOptions: {
+      globals: {
+        module: "readonly",
+        require: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+      },
+    },
+  },
   // Build tooling under scripts/ is Node ESM outside the TypeScript program: disable type-aware
   // rules and permit console output (these scripts report build progress on stdout).
   { files: ["scripts/**/*.mjs"], ...tseslint.configs.disableTypeChecked },
