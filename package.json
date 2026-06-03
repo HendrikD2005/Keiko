@@ -40,6 +40,8 @@
     "prepare:bin": "node scripts/ensure-bin-mode.mjs",
     "build:ui": "node scripts/build-ui.mjs",
     "check:package-surface": "node scripts/check-package-surface.mjs",
+    "smoke:install": "node scripts/installable-package-smoke.mjs",
+    "check:workspace-supply-chain": "node scripts/check-workspace-supply-chain.mjs",
     "arch:check": "depcruise --validate .dependency-cruiser.cjs src packages",
     "arch:check:negative": "node scripts/arch-check-negative.mjs",
     "prepack": "npm run clean && npm run build && npm run prepare:bin && npm run build:ui && npm run check:package-surface",
@@ -75,5 +77,17 @@
     "@oscharko-dev/keiko-workflows": "*",
     "@oscharko-dev/keiko-workspace": "*",
     "ws": "^8.21.0"
-  }
+  },
+  "bundleDependencies": [
+    "@oscharko-dev/keiko-contracts",
+    "@oscharko-dev/keiko-security",
+    "@oscharko-dev/keiko-model-gateway",
+    "@oscharko-dev/keiko-workspace",
+    "@oscharko-dev/keiko-tools",
+    "@oscharko-dev/keiko-evidence",
+    "@oscharko-dev/keiko-harness",
+    "@oscharko-dev/keiko-workflows",
+    "@oscharko-dev/keiko-server",
+    "@oscharko-dev/keiko-cli"
+  ]
 }
