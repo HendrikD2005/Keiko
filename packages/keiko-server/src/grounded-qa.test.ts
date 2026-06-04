@@ -77,7 +77,7 @@ function emptyPack(): ConnectedContextPack {
     },
     budget: {
       searchCallsMax: 1,
-      filesReadMax: 1,
+      filesReadMax: 4,
       excerptBytesMax: 1024,
       modelInputTokensMax: 1024,
       modelOutputTokensMax: 256,
@@ -105,6 +105,11 @@ function packWithCitations(): ConnectedContextPack {
   const base = emptyPack();
   return {
     ...base,
+    usage: {
+      ...base.usage,
+      filesRead: 2,
+      excerptBytes: 68,
+    },
     files: [
       {
         scopePath: "src/foo.ts",
@@ -236,6 +241,43 @@ describe("handleGroundedAsk", () => {
     expect(result.status).toBe(400);
     const body = result.body as { error: { code: string; message: string } };
     expect(body.error.message).toContain("connected scope");
+  });
+
+  it("fails closed when the runner returns an invalid context pack", async () => {
+    const { chatId } = await setupChatWithScope();
+    const invalidPack: ConnectedContextPack = {
+      ...emptyPack(),
+      files: [
+        {
+          scopePath: ".env",
+          role: "read-only",
+          selectionReason: "exact-match",
+          excerpts: [],
+        },
+      ],
+    };
+    const result = await runHandler(
+      JSON.stringify({ chatId, content: "hello" }),
+      runner(invalidPack),
+    );
+    expect(result.status).toBe(500);
+    expect(store.listMessages(chatId)).toEqual([]);
+  });
+
+  it("fails closed when the runner returns a malformed pack that would make validation throw", async () => {
+    const { chatId } = await setupChatWithScope();
+    const malformedRunner: GroundedRunner = () =>
+      Promise.resolve({
+        pack: { bogus: true } as unknown as ConnectedContextPack,
+        assistantContent: "hello",
+        elapsedMs: 1,
+      } satisfies OrchestratorOutput);
+    const result = await runHandler(
+      JSON.stringify({ chatId, content: "hello" }),
+      malformedRunner,
+    );
+    expect(result.status).toBe(500);
+    expect(store.listMessages(chatId)).toEqual([]);
   });
 
   it("happy path: persists user + assistant messages and returns sorted citations", async () => {

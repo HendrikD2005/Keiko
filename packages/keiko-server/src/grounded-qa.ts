@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 
 import {
   CONNECTED_CONTEXT_SCHEMA_VERSION,
+  validateConnectedContextPack,
   type ConnectedContextPack,
   type RetrievalQuery,
   type SelectedScope,
@@ -82,6 +83,18 @@ function payloadTooLarge(): RouteResult {
     status: 413,
     body: errorBody("PAYLOAD_TOO_LARGE", "Request body exceeds the size limit."),
   };
+}
+
+function internalError(message: string): RouteResult {
+  return { status: 500, body: errorBody("INTERNAL", message) };
+}
+
+function isValidGroundedPack(pack: ConnectedContextPack): boolean {
+  try {
+    return validateConnectedContextPack(pack).ok;
+  } catch {
+    return false;
+  }
 }
 
 interface AskInput {
@@ -274,6 +287,9 @@ async function runAsk(workerCtx: AskWorkerCtx): Promise<RouteResult> {
       return badRequest(error.message);
     }
     throw error;
+  }
+  if (!isValidGroundedPack(output.pack)) {
+    return internalError("Grounded answer context pack failed validation.");
   }
   const [userMessage, assistantMessage] = persistGroundedExchange(
     deps,

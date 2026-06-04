@@ -121,7 +121,7 @@ function attackerPack(): ConnectedContextPack {
     usage: {
       searchCalls: 0,
       filesRead: 1,
-      excerptBytes: 32,
+      excerptBytes: PEM_FAKE.length,
       modelInputTokens: 0,
       modelOutputTokens: 0,
       elapsedMs: 0,
