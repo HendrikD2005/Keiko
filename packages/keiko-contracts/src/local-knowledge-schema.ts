@@ -25,7 +25,7 @@
 // metric). When the active embedding model changes, stale vectors are detected by a single
 // scan against the index `idx_vectors_capsule_identity` without joining back to `capsules`.
 
-export const LOCAL_KNOWLEDGE_DB_SCHEMA_VERSION = 2 as const;
+export const LOCAL_KNOWLEDGE_DB_SCHEMA_VERSION = 4 as const;
 
 // ─── DDL statements (applied in declared order) ──────────────────────────────────
 // node:sqlite from Node 22 ships SQLite ≥ 3.45 which supports `STRICT`. Each statement is
@@ -109,6 +109,17 @@ CREATE TABLE documents (
   FOREIGN KEY (capsule_id) REFERENCES capsules(id) ON DELETE CASCADE,
   FOREIGN KEY (capsule_id, source_id) REFERENCES capsule_sources(capsule_id, id) ON DELETE CASCADE,
   UNIQUE (capsule_id, id)
+) STRICT;
+`.trim();
+
+const CREATE_DOCUMENT_TEXTS = `
+CREATE TABLE document_texts (
+  capsule_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  normalized_text TEXT NOT NULL,
+  PRIMARY KEY (document_id),
+  FOREIGN KEY (capsule_id) REFERENCES capsules(id) ON DELETE CASCADE,
+  FOREIGN KEY (capsule_id, document_id) REFERENCES documents(capsule_id, id) ON DELETE CASCADE
 ) STRICT;
 `.trim();
 
@@ -267,6 +278,37 @@ CREATE TABLE capsule_membership_changes (
 const CREATE_CAPSULE_MEMBERSHIP_CHANGES_INDEX =
   "CREATE INDEX idx_capsule_membership_changes_capsule_time ON capsule_membership_changes(capsule_id, occurred_at);";
 
+const CREATE_CAPSULE_AUDIT_EVENTS = `
+CREATE TABLE capsule_audit_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  capsule_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (
+    kind IN (
+      'capsule-created',
+      'capsule-deleted',
+      'source-added',
+      'source-removed',
+      'indexing-job-started',
+      'indexing-job-completed',
+      'indexing-job-failed',
+      'retention-applied'
+    )
+  ),
+  source_id TEXT,
+  job_id TEXT,
+  error_code TEXT,
+  processed_documents INTEGER,
+  failed_documents INTEGER,
+  deleted_vector_count INTEGER,
+  deleted_extracted_text_count INTEGER,
+  occurred_at INTEGER NOT NULL,
+  FOREIGN KEY (capsule_id) REFERENCES capsules(id) ON DELETE CASCADE
+) STRICT;
+`.trim();
+
+const CREATE_CAPSULE_AUDIT_EVENTS_INDEX =
+  "CREATE INDEX idx_capsule_audit_events_capsule_time ON capsule_audit_events(capsule_id, occurred_at);";
+
 // Statements must be applied in this exact order: PRAGMA first (so child-table NOT NULL
 // foreign-key constraints are enforced as the rows arrive), then parents before children.
 export const KNOWLEDGE_CAPSULE_DDL: readonly string[] = [
@@ -275,6 +317,7 @@ export const KNOWLEDGE_CAPSULE_DDL: readonly string[] = [
   CREATE_CAPSULE_SOURCES,
   CREATE_CAPSULE_SET_MEMBERS,
   CREATE_DOCUMENTS,
+  CREATE_DOCUMENT_TEXTS,
   CREATE_PAGES,
   CREATE_SECTIONS,
   CREATE_PARSED_UNITS,
@@ -284,6 +327,7 @@ export const KNOWLEDGE_CAPSULE_DDL: readonly string[] = [
   CREATE_INDEXING_JOBS,
   CREATE_SCHEMA_META,
   CREATE_CAPSULE_MEMBERSHIP_CHANGES,
+  CREATE_CAPSULE_AUDIT_EVENTS,
 ] as const;
 
 // ─── Indexes (scoped-query patterns only — no full-table scans) ──────────────────
@@ -296,6 +340,7 @@ export const KNOWLEDGE_CAPSULE_INDEXES: readonly string[] = [
   "CREATE INDEX idx_parser_diagnostics_capsule_doc ON parser_diagnostics(capsule_id, document_id);",
   "CREATE INDEX idx_indexing_jobs_capsule_status ON indexing_jobs(capsule_id, status);",
   CREATE_CAPSULE_MEMBERSHIP_CHANGES_INDEX,
+  CREATE_CAPSULE_AUDIT_EVENTS_INDEX,
 ] as const;
 
 // Runtime deletion primitive (#193 uses this inside a transaction). The cascade chain in
@@ -354,6 +399,17 @@ export const KNOWLEDGE_CAPSULE_MIGRATIONS: readonly KnowledgeCapsuleMigration[] 
       "Audit trail for capsule composition events (add-source, remove-source, compose-set) for Issue #263.",
     up: [CREATE_CAPSULE_MEMBERSHIP_CHANGES, CREATE_CAPSULE_MEMBERSHIP_CHANGES_INDEX],
   },
+  {
+    version: 3,
+    reason: "Persist metadata-only capsule lifecycle and retention audit events for Issue #201.",
+    up: [CREATE_CAPSULE_AUDIT_EVENTS, CREATE_CAPSULE_AUDIT_EVENTS_INDEX],
+  },
+  {
+    version: 4,
+    reason:
+      "Persist normalized extracted text for binary parsers so chunk offsets project against extracted content.",
+    up: [CREATE_DOCUMENT_TEXTS],
+  },
 ] as const;
 
 // Expected table/index names; consumers can iterate to assert presence without re-parsing
@@ -380,7 +436,9 @@ export const KNOWLEDGE_CAPSULE_V1_TABLES: readonly string[] = [
 
 export const KNOWLEDGE_CAPSULE_TABLES: readonly string[] = [
   ...KNOWLEDGE_CAPSULE_V1_TABLES,
+  "document_texts",
   "capsule_membership_changes",
+  "capsule_audit_events",
 ] as const;
 
 export const KNOWLEDGE_CAPSULE_INDEX_NAMES: readonly string[] = [
@@ -392,4 +450,5 @@ export const KNOWLEDGE_CAPSULE_INDEX_NAMES: readonly string[] = [
   "idx_parser_diagnostics_capsule_doc",
   "idx_indexing_jobs_capsule_status",
   "idx_capsule_membership_changes_capsule_time",
+  "idx_capsule_audit_events_capsule_time",
 ] as const;

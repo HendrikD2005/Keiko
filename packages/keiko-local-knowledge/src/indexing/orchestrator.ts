@@ -38,6 +38,7 @@ import type {
 import { chunkDocument } from "../chunking/chunker-runner.js";
 import { getCapsule, updateCapsuleState } from "../capsule-lifecycle.js";
 import { discoverAndExtract } from "../discovery/discovery-runner.js";
+import { readDocumentTextRow } from "../discovery/persist.js";
 import type { ExtractionEvent, ExtractionResult } from "../discovery/types.js";
 import { listCapsuleSources } from "../source-lifecycle.js";
 
@@ -220,6 +221,23 @@ function readSourceText(state: RunState, source: KnowledgeSource, relativePath: 
   return state.options.workspaceFs.readFileUtf8(abs);
 }
 
+function resolveChunkSourceText(
+  state: RunState,
+  documentId: DocumentId,
+  source: KnowledgeSource,
+  relativePath: string,
+): string {
+  const persistedText = readDocumentTextRow(
+    state.options.store._internal.db,
+    state.capsule.id,
+    documentId,
+  );
+  if (persistedText !== undefined) {
+    return persistedText;
+  }
+  return readSourceText(state, source, relativePath);
+}
+
 // ─── Batch boundaries ─────────────────────────────────────────────────────────
 function sliceIntoBatches<T>(items: readonly T[], batchSize: number): readonly (readonly T[])[] {
   if (items.length === 0) return [];
@@ -243,9 +261,9 @@ async function embedDocumentChunks(
   source: KnowledgeSource,
   relativePath: string,
 ): Promise<EmbedDocumentResult> {
-  // Re-read the document's UTF-8 source text. Cached by the OS from the discovery pass;
-  // the in-memory copy is dropped after the document's batches all complete.
-  const sourceText = readSourceText(state, source, relativePath);
+  // Text-like documents are re-read from disk; binary parsers persist a normalized text
+  // projection so chunk slicing stays aligned with extracted content.
+  const sourceText = resolveChunkSourceText(state, documentId, source, relativePath);
   const chunks = projectChunksToEmbed(state, documentId, sourceText);
   if (chunks.length === 0) {
     return { vectorCount: 0, errors: [], lastChunkId: null };
@@ -331,7 +349,7 @@ function chunkPersistedDocument(
   state: RunState,
   result: ExtractionResult,
 ): {
-  readonly events: IndexingEvent[];
+  readonly events: readonly IndexingEvent[];
   readonly documentId: DocumentId;
   readonly chunkCount: number;
 } {
@@ -342,13 +360,19 @@ function chunkPersistedDocument(
     );
   }
   const documentId = result.outcome.document.id;
+  const sourceText = resolveChunkSourceText(
+    state,
+    documentId,
+    sourceForResult(state, result),
+    result.relativePath,
+  );
   const chunkResult = chunkDocument(
     state.options.store,
     {
       capsuleId: state.capsule.id,
       sourceId: result.sourceId,
       documentId,
-      sourceText: readSourceText(state, sourceForResult(state, result), result.relativePath),
+      sourceText,
       force: state.options.force === true,
       ...(state.options.signal !== undefined ? { signal: state.options.signal } : {}),
     },
@@ -356,23 +380,22 @@ function chunkPersistedDocument(
   );
   const chunkCount = resolveChunkCount(state, documentId, chunkResult.skippedExisting, chunkResult.chunkIds);
   return {
-    events: [
-      {
-        kind: "document-extracted",
-        jobId: state.jobId,
-        documentId,
-        relativePath: result.relativePath,
-      },
-      {
-        kind: "document-chunked",
-        jobId: state.jobId,
-        documentId,
-        chunkCount,
-      },
-    ],
+    events: chunkedDocumentEvents(state.jobId, documentId, result.relativePath, chunkCount),
     documentId,
     chunkCount,
   };
+}
+
+function chunkedDocumentEvents(
+  jobId: string,
+  documentId: DocumentId,
+  relativePath: string,
+  chunkCount: number,
+): readonly IndexingEvent[] {
+  return [
+    { kind: "document-extracted", jobId, documentId, relativePath },
+    { kind: "document-chunked", jobId, documentId, chunkCount },
+  ];
 }
 
 function sourceForResult(state: RunState, result: ExtractionResult): KnowledgeSource {
@@ -685,6 +708,12 @@ export async function* runIndexingJob(options: IndexingOptions): AsyncIterable<I
     sourceIds: sources.map((s) => s.id),
     startedAt,
   });
+  options.auditSink?.emit({
+    kind: "indexing-job-started",
+    capsuleId: capsule.id,
+    jobId,
+    occurredAt: startedAt,
+  });
 
   // Force mode: tear down ALL vectors for the capsule up front. Per-document teardown
   // still runs in handlePersistedDocument as a defence-in-depth measure.
@@ -768,8 +797,23 @@ function* finalize(
   }
   if (status === "failed") {
     const err = state.lastError ?? { code: "EMBEDDING_ADAPTER_FAILED", message: "indexing failed" };
+    state.options.auditSink?.emit({
+      kind: "indexing-job-failed",
+      capsuleId: state.capsule.id,
+      jobId: state.jobId,
+      errorCode: err.code,
+      occurredAt: finishedAt,
+    });
     yield emit(state, { kind: "job-failed", jobId: state.jobId, error: err, result });
     return;
   }
+  state.options.auditSink?.emit({
+    kind: "indexing-job-completed",
+    capsuleId: state.capsule.id,
+    jobId: state.jobId,
+    processedDocuments: result.processedDocuments,
+    failedDocuments: result.failedDocuments,
+    occurredAt: finishedAt,
+  });
   yield emit(state, { kind: "job-completed", jobId: state.jobId, result });
 }
