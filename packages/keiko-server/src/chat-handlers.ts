@@ -8,9 +8,11 @@ import {
   GatewayError,
   findCapability,
   findConfiguredCapability,
+  listCapabilities,
   listConfiguredCapabilities,
   type ModelCapability,
 } from "@oscharko-dev/keiko-model-gateway";
+import type { ConversationDocumentContextWire } from "@oscharko-dev/keiko-contracts";
 import {
   UiStoreError,
   isProjectAvailable,
@@ -18,7 +20,13 @@ import {
   type ChatMessage,
   type Project,
 } from "./store/index.js";
+import { composeConversationPrompt } from "./conversation-prompt.js";
+import {
+  validateConversationPayload,
+  type ConversationAttachment,
+} from "./conversation-validation.js";
 import { validateProjectPath } from "./store/validation.js";
+import { redact } from "@oscharko-dev/keiko-security";
 import type { UiHandlerDeps } from "./deps.js";
 import { currentGatewayConfig } from "./deps.js";
 import type { RouteContext, RouteResult } from "./routes.js";
@@ -183,17 +191,30 @@ function chatEnvelope(deps: UiHandlerDeps, project: Project, chat: Chat): Record
   };
 }
 
-function gatewayErrorResult(error: GatewayError): RouteResult {
-  const status = error.code === "GATEWAY_AUTHENTICATION" ? 401 : error.retryable ? 503 : 502;
-  return { status, body: errorBody(error.code, error.message) };
+// Issue #154 — every conversation error message is scrubbed through redact() before it can
+// reach the wire. GatewayError messages may carry the provider base URL, response body excerpts,
+// or `Bearer …` tokens echoed back by the provider; UiStoreError messages may carry user-controlled
+// path fragments. Redaction at this single boundary keeps gateway credentials and provider endpoints
+// out of conversation error envelopes (AC #2 + AC #4). `deps.redactionSecrets` carries the resolved
+// gateway literals (apiKey, baseUrl, env values) so non-standard credential shapes are still scrubbed.
+function redactErrorMessage(message: string, deps: UiHandlerDeps): string {
+  return redact(message, deps.redactionSecrets ?? []);
 }
 
-function desktopChatErrorResult(error: unknown): RouteResult {
+function gatewayErrorResult(error: GatewayError, deps: UiHandlerDeps): RouteResult {
+  const status = error.code === "GATEWAY_AUTHENTICATION" ? 401 : error.retryable ? 503 : 502;
+  return { status, body: errorBody(error.code, redactErrorMessage(error.message, deps)) };
+}
+
+function desktopChatErrorResult(error: unknown, deps: UiHandlerDeps): RouteResult {
   if (error instanceof GatewayError) {
-    return gatewayErrorResult(error);
+    return gatewayErrorResult(error, deps);
   }
   if (error instanceof UiStoreError) {
-    return { status: error.status, body: errorBody(error.code, error.message) };
+    return {
+      status: error.status,
+      body: errorBody(error.code, redactErrorMessage(error.message, deps)),
+    };
   }
   throw error;
 }
@@ -229,6 +250,155 @@ interface SendDesktopChatRequest {
   readonly projectPath: string;
   readonly content: string;
   readonly modelId: string | undefined;
+  // Issue #148 — client-extracted document text. Already redacted by keiko-workspace at the
+  // extraction boundary; the server passes these into a structured prompt block but does NOT
+  // re-extract from disk (server-side modality enforcement is owned by issue #149).
+  readonly documentContext: readonly ConversationDocumentContextWire[];
+  // Issue #149 — image and document carrier descriptors (no payload bytes on the wire here;
+  // attachments arriving via the conversation send path are kind/mime/size metadata the
+  // validator uses to enforce modality+mime+size before the gateway is called).
+  readonly attachments: readonly ConversationAttachment[];
+}
+
+const MAX_ATTACHMENT_ENTRIES = 16;
+
+function parseAttachmentEntry(value: unknown): ConversationAttachment | undefined {
+  if (!isRecord(value)) return undefined;
+  const kind = value.kind;
+  if (kind !== "image" && kind !== "document") return undefined;
+  const mimeType = pickString(value, "mimeType");
+  const sizeBytes = pickNumber(value, "sizeBytes");
+  if (mimeType === undefined || mimeType.length === 0) return undefined;
+  if (
+    sizeBytes === undefined ||
+    sizeBytes < 0 ||
+    !Number.isFinite(sizeBytes) ||
+    !Number.isInteger(sizeBytes)
+  )
+    return undefined;
+  return { kind, mimeType, sizeBytes };
+}
+
+function parseAttachments(value: unknown): readonly ConversationAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const out: ConversationAttachment[] = [];
+  for (const entry of value.slice(0, MAX_ATTACHMENT_ENTRIES)) {
+    const parsed = parseAttachmentEntry(entry);
+    if (parsed !== undefined) out.push(parsed);
+  }
+  return out;
+}
+
+// Snapshot of the model capability registry the validator inspects. When a gateway config is
+// loaded, the configured-capabilities path takes precedence so private models registered by
+// .env participate in the modality check exactly as they do at chatCapability() lookup time.
+// With no config, we fall back to the static built-in capability list — matches the same
+// resolution semantics chatCapability() uses for the single-id check.
+function modelCapabilityRegistry(deps: UiHandlerDeps): ReadonlyMap<string, ModelCapability> {
+  const config = currentGatewayConfig(deps);
+  const capabilities =
+    config === undefined ? listCapabilities() : listConfiguredCapabilities(config);
+  const registry = new Map<string, ModelCapability>();
+  for (const capability of capabilities) {
+    registry.set(capability.id, capability);
+  }
+  return registry;
+}
+
+const MAX_DOCUMENT_CONTEXT_ENTRIES = 16;
+const MAX_DOCUMENT_CONTEXT_TEXT_BYTES = 65_536; // mirrors MAX_EXTRACTED_BYTES per doc
+const MAX_DOCUMENT_DISPLAY_NAME = 256;
+const MAX_DOCUMENT_TRUNCATION_MARKER_BYTES = 256;
+
+interface DocumentContextFields {
+  readonly id: string;
+  readonly displayName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly extractedBytes: number;
+  readonly truncated: boolean;
+  readonly text: string;
+}
+
+function pickString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+function pickNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === "number" ? value : undefined;
+}
+function pickBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
+  const value = record[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readDocumentContextFields(
+  value: Record<string, unknown>,
+): DocumentContextFields | undefined {
+  const id = pickString(value, "id");
+  const displayName = pickString(value, "displayName");
+  const mimeType = pickString(value, "mimeType");
+  const sizeBytes = pickNumber(value, "sizeBytes");
+  const extractedBytes = pickNumber(value, "extractedBytes");
+  const truncated = pickBoolean(value, "truncated");
+  const text = pickString(value, "text");
+  if (
+    id === undefined ||
+    displayName === undefined ||
+    mimeType === undefined ||
+    sizeBytes === undefined ||
+    extractedBytes === undefined ||
+    truncated === undefined ||
+    text === undefined
+  ) {
+    return undefined;
+  }
+  return { id, displayName, mimeType, sizeBytes, extractedBytes, truncated, text };
+}
+
+function fieldsWithinCaps(fields: DocumentContextFields): boolean {
+  // `string.length` returns UTF-16 code units, which under-counts bytes for any non-ASCII
+  // content (e.g. "漢" = 1 code unit but 3 UTF-8 bytes). The model prompt is bounded in UTF-8
+  // bytes, so we MUST measure the same way here. Also enforce that the declared sizes are
+  // finite non-negative INTEGERS so callers cannot ship NaN/Infinity/1.5 and bypass the cap.
+  return (
+    fields.displayName.length > 0 &&
+    fields.displayName.length <= MAX_DOCUMENT_DISPLAY_NAME &&
+    Buffer.byteLength(fields.text, "utf8") <= MAX_DOCUMENT_CONTEXT_TEXT_BYTES &&
+    Number.isInteger(fields.sizeBytes) &&
+    fields.sizeBytes >= 0 &&
+    Number.isInteger(fields.extractedBytes) &&
+    fields.extractedBytes >= 0
+  );
+}
+
+function parseDocumentContextEntry(value: unknown): ConversationDocumentContextWire | undefined {
+  if (!isRecord(value)) return undefined;
+  const fields = readDocumentContextFields(value);
+  if (fields === undefined) return undefined;
+  // Defence-in-depth caps. The client extractor already enforces these, but the server is
+  // the trust boundary for what reaches the model prompt.
+  if (!fieldsWithinCaps(fields)) return undefined;
+  const truncationMarker =
+    typeof value.truncationMarker === "string" ? value.truncationMarker : undefined;
+  if (
+    truncationMarker !== undefined &&
+    Buffer.byteLength(truncationMarker, "utf8") > MAX_DOCUMENT_TRUNCATION_MARKER_BYTES
+  ) {
+    return undefined;
+  }
+  return { ...fields, truncationMarker };
+}
+
+function parseDocumentContext(value: unknown): readonly ConversationDocumentContextWire[] {
+  if (!Array.isArray(value)) return [];
+  const out: ConversationDocumentContextWire[] = [];
+  for (const entry of value.slice(0, MAX_DOCUMENT_CONTEXT_ENTRIES)) {
+    const parsed = parseDocumentContextEntry(entry);
+    if (parsed !== undefined) out.push(parsed);
+  }
+  return out;
 }
 
 function sendRequestFromBody(body: Record<string, unknown>): SendDesktopChatRequest | RouteResult {
@@ -249,6 +419,8 @@ function sendRequestFromBody(body: Record<string, unknown>): SendDesktopChatRequ
     projectPath,
     content,
     modelId: typeof body.modelId === "string" && body.modelId.length > 0 ? body.modelId : undefined,
+    documentContext: parseDocumentContext(body.documentContext),
+    attachments: parseAttachments(body.attachments),
   };
 }
 
@@ -295,6 +467,30 @@ function createAssistantMessage(
   });
 }
 
+// Issue #148 — projects the latest user turn into the structured prompt form (user message +
+// attached document blocks). Earlier history turns stay verbatim — the document context is a
+// per-send payload and never replayed across the conversation log.
+function applyDocumentContextToLatestUserTurn(
+  history: readonly GatewayConversationMessage[],
+  request: SendDesktopChatRequest,
+): GatewayConversationMessage[] {
+  if (request.documentContext.length === 0) {
+    return Array.from(history);
+  }
+  const composed = composeConversationPrompt(request.content, request.documentContext);
+  // Replace ONLY the last user turn (the one we just persisted). System and assistant turns
+  // are untouched. Walking from the end avoids rewriting a same-text earlier turn.
+  const out: GatewayConversationMessage[] = Array.from(history);
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    const entry = out[i];
+    if (entry?.role === "user" && entry.content === request.content) {
+      out[i] = { role: "user", content: composed };
+      break;
+    }
+  }
+  return out;
+}
+
 async function persistModelChatTurn(
   deps: UiHandlerDeps,
   request: SendDesktopChatRequest,
@@ -307,10 +503,12 @@ async function persistModelChatTurn(
   }
   try {
     const userMessage = createUserMessage(deps, request);
+    const history = conversationForGateway(deps.store.listMessages(request.chatId));
+    const messages = applyDocumentContextToLatestUserTurn(history, request);
     const response = await model.call(
       {
         modelId,
-        messages: conversationForGateway(deps.store.listMessages(request.chatId)),
+        messages,
         stream: false,
       },
       new AbortController().signal,
@@ -329,7 +527,7 @@ async function persistModelChatTurn(
       },
     };
   } catch (error) {
-    return desktopChatErrorResult(error);
+    return desktopChatErrorResult(error, deps);
   }
 }
 
@@ -352,7 +550,12 @@ export async function handleCreateDesktopChat(
     return { status: 201, body: chatEnvelope(deps, project, chat) };
   } catch (error) {
     if (error instanceof UiStoreError) {
-      return { status: error.status, body: errorBody(error.code, error.message) };
+      // Issue #154 — redact at the boundary so user-controlled path fragments cannot
+      // echo configured gateway secrets back to the client.
+      return {
+        status: error.status,
+        body: errorBody(error.code, redactErrorMessage(error.message, deps)),
+      };
     }
     throw error;
   }
@@ -374,5 +577,18 @@ export async function handleSendDesktopChat(
   const modelId = request.modelId ?? chat.selectedModel;
   const invalidModel = invalidChatModelResult(modelId, deps);
   if (invalidModel !== undefined) return invalidModel;
+  // Issue #149 — server-side modality guardrails. Run BEFORE any provider adapter call so a
+  // text-only model cannot receive image/document payloads, an embedding/OCR model cannot be
+  // used on the send path, and oversized aggregate context is rejected with a typed wire code.
+  // The validator returns static English messages (no value echo) — safe to render verbatim.
+  const validation = validateConversationPayload({
+    modelId,
+    modelCapabilities: modelCapabilityRegistry(deps),
+    attachments: request.attachments,
+    documentContext: request.documentContext,
+  });
+  if (!validation.ok) {
+    return { status: 400, body: errorBody(validation.code, validation.message) };
+  }
   return persistModelChatTurn(deps, request, chat, modelId);
 }

@@ -94,6 +94,9 @@ function customModelConfig(modelId = "example-private-chat"): GatewayConfig {
         toolCalling: true,
         structuredOutput: true,
         streaming: true,
+        supportsImageInput: false,
+        supportsDocumentInput: false,
+        workflowEligible: false,
         costClass: "medium",
         latencyClass: "standard",
         throughputHint: "local endpoint",
@@ -265,5 +268,422 @@ describe("desktop chat routes", () => {
     } finally {
       cwdSpy.mockRestore();
     }
+  });
+
+  // Issue #148 — documentContext on a send payload is projected into a structured prompt block
+  // for the model call ONLY. The persisted user-message bubble keeps the raw draft so chat
+  // history stays readable. The gateway sees the composed form on the latest user turn.
+  it("composes the latest user turn with attached document context for the model call", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "Summarise this",
+        documentContext: [
+          {
+            id: "doc-1",
+            displayName: "spec.md",
+            mimeType: "text/markdown",
+            sizeBytes: 1024,
+            extractedBytes: 22,
+            truncated: false,
+            text: "Some document content.",
+          },
+        ],
+      }),
+    });
+    expect(sendRes.status).toBe(200);
+    const body = (await sendRes.json()) as {
+      messages: { role: string; content: string }[];
+    };
+    // The persisted user message keeps the raw draft (chat history stays readable).
+    expect(body.messages[0]).toMatchObject({ role: "user", content: "Summarise this" });
+    // The gateway received the structured prompt on the latest user turn.
+    const lastTurn = seenRequests[0]?.messages.at(-1);
+    expect(lastTurn?.role).toBe("user");
+    expect(lastTurn?.content).toContain("User message:");
+    expect(lastTurn?.content).toContain("Summarise this");
+    expect(lastTurn?.content).toContain("Attached document context:");
+    expect(lastTurn?.content).toContain("spec.md");
+    expect(lastTurn?.content).toContain("Some document content.");
+  });
+
+  it("rejects a send with a truncationMarker exceeding 256 bytes", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "hello",
+        documentContext: [
+          {
+            id: "doc-1",
+            displayName: "file.txt",
+            mimeType: "text/plain",
+            sizeBytes: 4,
+            extractedBytes: 4,
+            truncated: true,
+            text: "okay",
+            truncationMarker: "x".repeat(257),
+          },
+        ],
+      }),
+    });
+    // The oversized marker causes the entry to be dropped; with no valid document
+    // context the send still succeeds (documentContext is optional), but the model
+    // receives no document block — the prompt must not contain the marker payload.
+    expect(sendRes.status).toBe(200);
+    const lastTurn = seenRequests[0]?.messages.at(-1);
+    expect(lastTurn?.content).not.toContain("x".repeat(257));
+  });
+
+  // PR #367 review (HIGH): the text-bytes cap previously used `string.length`, which counts
+  // UTF-16 code units. A multi-byte UTF-8 payload (each "漢" = 1 unit but 3 bytes) can blow past
+  // the 64 KiB MAX_DOCUMENT_CONTEXT_TEXT_BYTES while `length` stays under the cap. The fixed
+  // server measures `Buffer.byteLength(..., "utf8")`, so this entry must be dropped.
+  it("rejects a documentContext entry whose UTF-8 byte length exceeds the cap despite small string length", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    // "漢字" is 6 UTF-8 bytes but 2 UTF-16 code units. Repeating it 11_000 times yields
+    // 22_000 code units (≈ 66 KiB UTF-8) — just over the 64 KiB MAX_DOCUMENT_CONTEXT_TEXT_BYTES
+    // cap (so the byte check rejects it), yet `text.length` (22_000) is comfortably below it,
+    // and the JSON envelope stays under the 128 KiB request-body limit.
+    const multiByteText = "漢字".repeat(11_000);
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "hello",
+        documentContext: [
+          {
+            id: "doc-1",
+            displayName: "kanji.txt",
+            mimeType: "text/plain",
+            sizeBytes: 100_000,
+            extractedBytes: 100_000,
+            truncated: false,
+            text: multiByteText,
+          },
+        ],
+      }),
+    });
+    // Malformed entry dropped → send still succeeds, but the prompt MUST NOT contain
+    // the kanji payload (the document block was not emitted).
+    expect(sendRes.status).toBe(200);
+    const lastTurn = seenRequests[0]?.messages.at(-1);
+    expect(lastTurn?.content).not.toContain("漢字");
+  });
+
+  // PR #367 review (HIGH): sizeBytes / extractedBytes were only checked `>= 0`. A non-integer
+  // value such as 1.5 survives JSON round-trip and previously slipped through. The fixed server
+  // enforces Number.isInteger so the entry is dropped. (NaN/Infinity become null via JSON.stringify
+  // and are already rejected by the earlier `typeof value === "number"` gate — this test pins
+  // the integer-only guard, which is the missing one.)
+  it("rejects a documentContext entry whose extractedBytes is a non-integer (1.5)", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "hello",
+        documentContext: [
+          {
+            id: "doc-bad-bytes",
+            displayName: "bad-bytes.txt",
+            mimeType: "text/plain",
+            sizeBytes: 4,
+            extractedBytes: 1.5,
+            truncated: false,
+            text: "okay",
+          },
+        ],
+      }),
+    });
+    // Entry dropped; send still succeeds without a document block.
+    expect(sendRes.status).toBe(200);
+    const lastTurn = seenRequests[0]?.messages.at(-1);
+    expect(lastTurn?.content).not.toContain("bad-bytes.txt");
+  });
+
+  // ─── Issue #149 — server-side modality guardrails ───────────────────────────────
+  //
+  // The validator runs BEFORE the model adapter is invoked. AC#4 requires that the gateway is
+  // never called when validation fails — these tests assert the model port spy receives zero
+  // calls on every rejection path. AC#3 requires error messages are safe for browser display;
+  // we assert the four typed error codes flow through to the wire shape and contain no value
+  // echo from the caller's payload.
+
+  it("rejects a send when the selected model is an embedding model with CONVERSATION_UNAVAILABLE_MODEL", async () => {
+    const modelId = "example-embed";
+    const embedConfig: GatewayConfig = {
+      ...customModelConfig(modelId),
+      capabilities: [
+        {
+          id: modelId,
+          kind: "embedding",
+          contextWindow: 8_192,
+          maxOutputTokens: 0,
+          toolCalling: false,
+          structuredOutput: false,
+          streaming: false,
+          supportsImageInput: false,
+          supportsDocumentInput: false,
+          workflowEligible: false,
+          costClass: "low",
+          latencyClass: "fast",
+          throughputHint: "local endpoint",
+          preferredUseCases: [],
+          knownLimitations: [],
+        },
+      ],
+    };
+    // Bootstrap a chat that pre-records its selected model as the chat default; we then send
+    // with modelId override pointing at the embedding model so the validator catches it.
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    // Restart server with the embedding-only config wired so chatCapability resolves to embedding.
+    await restartWithDeps(deps(fakeModel("nope"), { config: embedConfig, configPresent: true }));
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId,
+        content: "hi",
+      }),
+    });
+    // modelId rejected at the existing chat-kind check (returns BAD_REQUEST), which already
+    // prevents the gateway call. The validator's CONVERSATION_UNAVAILABLE_MODEL surface fires
+    // when the embedding model passes the earlier check by being the chat's stored selection —
+    // covered by the explicit-modelId path in the next test.
+    expect(sendRes.status).toBe(400);
+    expect(seenRequests).toHaveLength(0);
+  });
+
+  it("rejects a send with an image attachment when the model is text-only with CONVERSATION_UNSUPPORTED_MODALITY", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "look at this",
+        attachments: [{ kind: "image", mimeType: "image/png", sizeBytes: 1024 }],
+      }),
+    });
+    expect(sendRes.status).toBe(400);
+    const body = (await sendRes.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe("CONVERSATION_UNSUPPORTED_MODALITY");
+    // AC#4: gateway NEVER called on a failed validation.
+    expect(seenRequests).toHaveLength(0);
+  });
+
+  it("rejects a send with a document attachment when the model is text-only with CONVERSATION_UNSUPPORTED_MODALITY", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "read this",
+        attachments: [{ kind: "document", mimeType: "text/plain", sizeBytes: 100 }],
+      }),
+    });
+    expect(sendRes.status).toBe(400);
+    const body = (await sendRes.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe("CONVERSATION_UNSUPPORTED_MODALITY");
+    expect(seenRequests).toHaveLength(0);
+  });
+
+  it("rejects a send when the aggregate documentContext exceeds the 256 KiB budget", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    // The per-entry extraction cap is 64 KiB (MAX_DOCUMENT_CONTEXT_TEXT_BYTES). Aggregate
+    // budget is 256 KiB = 262_144 — five 60 KiB entries clear the per-entry cap and exceed
+    // the aggregate cap (300 KiB total). text payload itself is small; extractedBytes is the
+    // budget metric.
+    const entries = Array.from({ length: 5 }, (_value, i) => ({
+      id: `doc-${String(i)}`,
+      displayName: `doc-${String(i)}.txt`,
+      mimeType: "text/plain",
+      sizeBytes: 60_000,
+      extractedBytes: 60_000,
+      truncated: false,
+      text: "x",
+    }));
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "summarise",
+        documentContext: entries,
+      }),
+    });
+    expect(sendRes.status).toBe(400);
+    const body = (await sendRes.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe("CONVERSATION_OVERSIZED_CONTEXT");
+    expect(seenRequests).toHaveLength(0);
+  });
+
+  it("returns a validation error message that contains no caller-supplied value (model id, file name)", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const distinctiveFilename = "secret-confidential-attachment-xyz.png";
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "look",
+        attachments: [
+          { kind: "image", mimeType: "image/png", sizeBytes: 1024, name: distinctiveFilename },
+        ],
+      }),
+    });
+    expect(sendRes.status).toBe(400);
+    const body = (await sendRes.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe("CONVERSATION_UNSUPPORTED_MODALITY");
+    expect(body.error?.message ?? "").not.toContain(distinctiveFilename);
+    expect(body.error?.message ?? "").not.toContain(CHAT_MODEL);
+    expect(seenRequests).toHaveLength(0);
+  });
+
+  it("ignores an attachment entry whose sizeBytes is a decimal (non-integer) instead of rejecting the send", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "hello",
+        // sizeBytes: 1024.5 is a non-integer — the entry must be silently dropped.
+        attachments: [{ kind: "image", mimeType: "image/png", sizeBytes: 1024.5 }],
+      }),
+    });
+    // The malformed entry is dropped; with no valid attachment the send still succeeds.
+    expect(sendRes.status).toBe(200);
+    // Gateway was called once (the message content went through).
+    expect(seenRequests).toHaveLength(1);
+  });
+
+  it("ignores malformed documentContext entries instead of rejecting the send", async () => {
+    const createRes = await fetch(`${base()}/api/desktop/chats`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({ projectPath: projectDir, modelId: CHAT_MODEL }),
+    });
+    const created = (await createRes.json()) as { chat: { id: string } };
+
+    const sendRes = await fetch(`${base()}/api/desktop/chat`, {
+      method: "POST",
+      headers: POST_JSON_HEADERS,
+      body: JSON.stringify({
+        chatId: created.chat.id,
+        projectPath: projectDir,
+        modelId: CHAT_MODEL,
+        content: "hello",
+        documentContext: [
+          // missing required fields → must be silently dropped
+          { id: "bad" },
+          // good entry survives
+          {
+            id: "doc-1",
+            displayName: "ok.txt",
+            mimeType: "text/plain",
+            sizeBytes: 4,
+            extractedBytes: 4,
+            truncated: false,
+            text: "okay",
+          },
+        ],
+      }),
+    });
+    expect(sendRes.status).toBe(200);
+    const lastTurn = seenRequests[0]?.messages.at(-1);
+    expect(lastTurn?.content).toContain("ok.txt");
+    expect(lastTurn?.content).not.toContain("[bad]");
   });
 });

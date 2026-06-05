@@ -1,11 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useChatSessionContext } from "./context/ChatSessionContext";
 import { ConnectedScopePill } from "./ConnectedScopePill";
+import { BudgetIndicator, BUDGET_EXCEEDED_ALERT_ID } from "./ContextBudget";
 import { GroundedAnswer } from "./GroundedAnswer";
 import { Icons } from "./Icons";
-import { DEFAULT_MODEL_ID, type ChatSessionApi } from "./hooks/useChatSession";
+import { SafeMarkdown } from "./SafeMarkdown";
+import {
+  AttachButton,
+  AttachDropZone,
+  AttachmentStrip,
+  AttachRejectionAlert,
+} from "./AttachmentStrip";
+import { isRunSummaryMessage, LaunchWorkflowButton, RunSummaryCard } from "./WorkflowHandoff";
+import { type ChatSessionApi, type SendStatus } from "./hooks/useChatSession";
+import type { AttachmentRejectionReason } from "./hooks/useChatSession";
 import { ApiError, updateChat } from "@/lib/api";
 import {
   fetchCapsules,
@@ -19,6 +36,7 @@ import type {
   ChatLocalKnowledgeScope,
   GroundedAnswer as GroundedAnswerWire,
   ModelCapability,
+  ProjectWithAvailability,
 } from "@/lib/types";
 
 interface ChatWindowProps {
@@ -26,22 +44,49 @@ interface ChatWindowProps {
   readonly linkedRoot?: string | null;
 }
 
-const SUGGESTIONS: readonly string[] = [
-  "Explain the architecture of this codebase",
-  "Find and fix a bug in the workspace store",
-  "Write tests for the window manager",
-];
+// AC #1 — voice is not yet implemented. Gate on a constant so that when the
+// capability flag arrives the removal is a one-line change, not a search.
+const VOICE_SUPPORTED = false;
+
+// Stable id for the no-model alert so aria-describedby chains can reference it.
+const NO_MODEL_ALERT_ID = "cmp-no-model-alert";
+
+// Stable id for the "type a message" send-button hint for aria-describedby.
+const SEND_HINT_ID = "cmp-send-hint";
+
+// Workspace-aware starter prompts for the empty state.
+function starterPrompts(activeProject: ProjectWithAvailability | undefined): readonly string[] {
+  if (activeProject !== undefined) {
+    return [
+      `Explain the architecture of ${activeProject.name}`,
+      `Find a bug in ${activeProject.name}`,
+      `Write tests for ${activeProject.name}`,
+    ];
+  }
+  return [
+    "Explain the architecture of this codebase",
+    "Find and fix a bug in the workspace store",
+    "Write tests for the window manager",
+  ];
+}
 
 function timeLabel(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Issue #153 — system messages that carry a workflow runId are rendered inline as
+// RunSummaryCards (the chat-side projection of the run). Other system messages keep
+// the historical "filtered out of the visible log" behaviour.
 function visibleOnly(messages: readonly ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => m.role === "user" || m.role === "assistant");
+  return messages.filter(
+    (m) => m.role === "user" || m.role === "assistant" || isRunSummaryMessage(m),
+  );
 }
 
+// No fallback to a placeholder model id — when no eligible models are
+// configured the caller renders a noEligibleModels error instead (AC #4).
 function modelList(models: readonly ModelCapability[]): readonly ModelCapability[] {
-  return models.length > 0 ? models : [{ id: DEFAULT_MODEL_ID } as ModelCapability];
+  return models;
 }
 
 function onComposerKeyDown(
@@ -56,12 +101,25 @@ function onComposerKeyDown(
 }
 
 function ChatBubble({ message }: { readonly message: ChatMessage }): ReactNode {
+  // Issue #153 — system messages carrying a workflow runId render as a structural run-summary
+  // card rather than a conversation bubble. AC#3: this keeps the run visible in the chat
+  // without weakening evidence semantics (the BFF's persisted runId is still the source of
+  // truth; this surface is read-only and never exposes apply/exec — AC#4).
+  if (isRunSummaryMessage(message)) {
+    return <RunSummaryCard message={message} />;
+  }
   const isUser = message.role === "user";
   return (
     <article className="chat-msg" data-role={message.role}>
       <div className="chat-msg-bubble">
         <div className="chat-msg-role">{isUser ? "You" : "Keiko"}</div>
-        {message.content}
+        {isUser ? (
+          message.content
+        ) : (
+          // AC #1 / #2: assistant responses render as safe markdown.
+          // User messages remain plain text — no markdown interpretation.
+          <SafeMarkdown source={message.content} />
+        )}
         <div className="chat-msg-time">{timeLabel(message.timestamp)}</div>
       </div>
     </article>
@@ -86,48 +144,210 @@ function TypingBubble(): ReactNode {
 interface ComposerBarProps {
   readonly session: ChatSessionApi;
   readonly ready: boolean;
+  readonly selectedModelCapability: ModelCapability | undefined;
+  readonly onAttachFiles: (files: readonly File[]) => void;
+  // Issue #151 — when true, the budget for the next send exceeds the model's
+  // window and the send button must be focusable but inert.
+  readonly budgetExceeded: boolean;
 }
 
-function ComposerBar({ session, ready }: ComposerBarProps): ReactNode {
-  const { models, selectedModel, setSelectedModel } = session;
+function ComposerBar({
+  session,
+  ready,
+  selectedModelCapability,
+  onAttachFiles,
+  budgetExceeded,
+}: ComposerBarProps): ReactNode {
+  const {
+    models,
+    selectedModel,
+    setSelectedModel,
+    noEligibleModels,
+    loading,
+    sending,
+    cancelSend,
+    launchWorkflowFromConversation,
+  } = session;
+  // AC #1 / AC #4: when no eligible model is configured the send button must be
+  // focusable (so screen-reader users discover the error) but must not submit.
+  // Use aria-disabled rather than the HTML disabled attribute so focus is retained.
+  // Issue #151 — budget-exceeded also blocks send.
+  const sendBlocked = noEligibleModels || budgetExceeded || !ready;
+
+  // AC #2: aria-describedby chains:
+  // - model select → NO_MODEL_ALERT_ID when noEligibleModels
+  // - send button  → NO_MODEL_ALERT_ID when noEligibleModels,
+  //                  BUDGET_EXCEEDED_ALERT_ID when context exceeded,
+  //                  else SEND_HINT_ID when !ready
+  const selectDescribedBy = noEligibleModels ? NO_MODEL_ALERT_ID : undefined;
+  const sendDescribedBy = noEligibleModels
+    ? NO_MODEL_ALERT_ID
+    : budgetExceeded
+      ? BUDGET_EXCEEDED_ALERT_ID
+      : !ready
+        ? SEND_HINT_ID
+        : undefined;
+
+  // AC #2 / title for disabled model select.
+  const selectTitle = noEligibleModels
+    ? "No conversation-eligible model is configured — connect a gateway in Settings"
+    : "Model";
+
   return (
     <div className="cmp-bar">
-      <button type="button" className="cmp-add" aria-label="Attach (coming soon)" title="Attach">
-        <Icons.plus size={16} />
-      </button>
+      {/* Issue #147: real AttachButton replaces the placeholder "Attach (coming soon)" button */}
+      <AttachButton model={selectedModelCapability} onFiles={onAttachFiles} />
       <button type="button" className="cmp-mode" title="Mode">
         <Icons.spark size={14} style={{ color: "var(--accent)" }} /> Build
         <Icons.chevron size={12} />
       </button>
       <span className="spacer" />
-      <label className="cmp-model mono" title="Model">
+      {/* AC #3: loading state — show a "Loading models…" option while bootstrapping */}
+      <label className="cmp-model mono" title={selectTitle}>
         <Icons.cube size={13} style={{ color: "var(--accent)" }} />
         <select
           className="cmp-model-select"
-          value={selectedModel}
+          value={loading ? "" : (selectedModel ?? "")}
           aria-label="Model"
+          aria-disabled={noEligibleModels || loading ? "true" : undefined}
+          aria-describedby={selectDescribedBy}
+          title={selectTitle}
+          disabled={noEligibleModels || loading}
           onChange={(event) => setSelectedModel(event.target.value)}
         >
-          {modelList(models).map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.id}
+          {loading ? (
+            <option value="" disabled>
+              Loading models…
             </option>
-          ))}
+          ) : (
+            modelList(models).map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.id}
+              </option>
+            ))
+          )}
         </select>
         <Icons.chevron size={12} />
       </label>
-      <button type="button" className="cmp-icon" aria-label="Voice (coming soon)" title="Voice">
-        <Icons.mic size={16} />
-      </button>
-      <button
-        type="submit"
-        className="cmp-send"
-        data-on={ready}
-        disabled={!ready}
-        aria-label="Send message"
-      >
-        <Icons.arrowUp size={16} />
-      </button>
+      {/* Issue #153: explicit Launch-workflow affordance. Hidden when no
+          workflow-eligible model is selected (AC#2). Opens the picker dialog
+          only on explicit user click (AC#1). */}
+      <LaunchWorkflowButton
+        selectedModel={selectedModelCapability}
+        launch={launchWorkflowFromConversation}
+      />
+      {/* AC #1: voice button omitted — VOICE_SUPPORTED is false.
+          When the capability flag arrives, render this block only when VOICE_SUPPORTED is true. */}
+      {VOICE_SUPPORTED ? (
+        <button type="button" className="cmp-icon" aria-label="Voice" title="Voice">
+          <Icons.mic size={16} />
+        </button>
+      ) : null}
+      {/* AC #2: visually-hidden hint for screen readers when send is blocked by empty draft */}
+      {sendDescribedBy === SEND_HINT_ID ? (
+        <span id={SEND_HINT_ID} className="sr-only">
+          Type a message to send
+        </span>
+      ) : null}
+      {/* Issue #152 — while a send is in flight the primary action button
+          flips to "Cancel response" (AC#1 + AC#3). Type="button" so it never
+          submits the surrounding form; onClick calls cancelSend which is a
+          safe no-op when the status is already terminal. */}
+      {sending ? (
+        <button
+          type="button"
+          className="cmp-send cmp-send-cancel"
+          data-on
+          aria-label="Cancel response"
+          title="Cancel response"
+          onClick={cancelSend}
+        >
+          <Icons.close size={16} />
+        </button>
+      ) : (
+        <button
+          type={noEligibleModels || budgetExceeded ? "button" : "submit"}
+          className="cmp-send"
+          data-on={!sendBlocked}
+          aria-disabled={sendBlocked}
+          aria-describedby={sendDescribedBy}
+          title={
+            noEligibleModels
+              ? "No conversation-eligible model is configured — connect a gateway in Settings"
+              : budgetExceeded
+                ? "Context exceeds the model's window — clear history or pick a larger-context model"
+                : !ready
+                  ? "Type a message to send"
+                  : "Send message"
+          }
+          disabled={!noEligibleModels && !budgetExceeded && !ready}
+          aria-label="Send message"
+        >
+          <Icons.arrowUp size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// AC #1: rendered when no conversation-eligible model is configured. Uses
+// role="alert" so screen readers announce immediately on mount. Uses gw-error
+// CSS class (var(--fg) text) for WCAG AA contrast compliance.
+// Stable id enables aria-describedby wiring from disabled controls (AC #2).
+function NoModelAlert(): ReactNode {
+  return (
+    <div id={NO_MODEL_ALERT_ID} role="alert" className="gw-error cmp-no-model">
+      No conversation-eligible model is configured. Connect a gateway in Settings to enable chat.
+    </div>
+  );
+}
+
+// AC #3: rendered while session.loading is true. role="status" (polite) so
+// screen-reader users hear the state without interruption. No fake progress
+// percentage — engineering note forbids it.
+function LoadingStatus(): ReactNode {
+  return (
+    <div role="status" className="cmp-loading-status">
+      <span className="cmp-loading-dot" aria-hidden="true" />
+      Connecting to your gateway…
+    </div>
+  );
+}
+
+// Issue #152 — user-facing copy per lifecycle state. Engineering note: NO
+// fake progress percentage. The strings here are the only progress signal.
+// Exported so the Streaming.test asserts on canonical copy without
+// duplicating it.
+export function sendStatusLabel(status: SendStatus): string {
+  switch (status) {
+    case "idle":
+      return "";
+    case "queued":
+      return "Submitting your message…";
+    case "contacting":
+      return "Contacting model…";
+    case "streaming":
+      return "Receiving response…";
+    case "completed":
+      return "";
+    case "failed":
+      return "";
+    case "cancelled":
+      return "Response cancelled.";
+  }
+}
+
+// Issue #152 / AC#1 + AC#4 — assistive announcement of the send lifecycle.
+// role="status" + aria-live="polite" so screen-reader users hear transitions
+// without interruption. Hidden when there is nothing to say (idle/completed/
+// failed — the error string carries its own role="alert").
+function SendLifecycleStatus({ status }: { readonly status: SendStatus }): ReactNode {
+  const label = sendStatusLabel(status);
+  if (label.length === 0) return null;
+  return (
+    <div role="status" aria-live="polite" data-send-status={status} className="cmp-send-status">
+      <span className="cmp-loading-dot" aria-hidden="true" />
+      {label}
     </div>
   );
 }
@@ -139,9 +359,60 @@ interface ComposerCoreProps {
 }
 
 function ComposerCore({ session, ready, placeholder }: ComposerCoreProps): ReactNode {
-  const { draft, loading, sending, setDraft, sendMessage } = session;
+  const {
+    draft,
+    loading,
+    sending,
+    sendStatus,
+    setDraft,
+    sendMessage,
+    models,
+    selectedModel,
+    pendingAttachments,
+    addPendingAttachment,
+    removePendingAttachment,
+    budget,
+    clearHistory,
+  } = session;
+  // Issue #151 — budget can be undefined while bootstrapping; treat that as
+  // not-exceeded so the composer remains submittable.
+  const budgetExceeded = budget?.pressure === "exceeded";
+
+  // Rejection state for the inline alert (AC #2 / Part 2).
+  const [rejectionReason, setRejectionReason] = useState<AttachmentRejectionReason | undefined>();
+  const [rejectionMime, setRejectionMime] = useState<string | undefined>();
+
+  const selectedModelCapability = models.find((m) => m.id === selectedModel);
+
+  // Derive whether any attachment kinds are supported by the selected model.
+  const attachEnabled =
+    selectedModelCapability !== undefined &&
+    (selectedModelCapability.supportsImageInput || selectedModelCapability.supportsDocumentInput);
+
+  const handleFiles = useCallback(
+    async (files: readonly File[]) => {
+      // Process each file; show the first rejection encountered.
+      let firstRejectionReason: AttachmentRejectionReason | undefined;
+      let firstRejectionMime: string | undefined;
+      for (const file of files) {
+        const result = await addPendingAttachment(file);
+        if (!result.ok && firstRejectionReason === undefined) {
+          firstRejectionReason = result.reason;
+          firstRejectionMime = file.type;
+        }
+      }
+      setRejectionReason(firstRejectionReason);
+      setRejectionMime(firstRejectionMime);
+    },
+    [addPendingAttachment],
+  );
+
   return (
     <div className="cmp-box">
+      {/* Drop zone above the textarea (Part 2 — shown when attachment is supported) */}
+      <AttachDropZone enabled={attachEnabled} onFiles={handleFiles} />
+      {/* Chip strip below the textarea, above the composer bar (AC #3) */}
+      <AttachmentStrip attachments={pendingAttachments} onRemove={removePendingAttachment} />
       <textarea
         className="cmp-input"
         rows={2}
@@ -152,7 +423,75 @@ function ComposerCore({ session, ready, placeholder }: ComposerCoreProps): React
         onKeyDown={onComposerKeyDown(sendMessage)}
         disabled={loading || sending}
       />
-      <ComposerBar session={session} ready={ready} />
+      {/* Inline rejection alert — role="alert" announces immediately (AC #2) */}
+      <AttachRejectionAlert reason={rejectionReason} mimeType={rejectionMime} />
+      {/* Issue #152 / AC#1 + AC#4 — lifecycle status announcement. Renders
+          adjacent to the textarea so SR users hear the state without losing
+          composer focus. Hidden when there is nothing to announce. */}
+      <SendLifecycleStatus status={sendStatus} />
+      {/* Issue #151 — context-pressure indicator + clear-history affordance */}
+      <BudgetIndicator
+        budget={budget}
+        onClearHistory={clearHistory}
+        disabled={sending || loading}
+      />
+      <ComposerBar
+        session={session}
+        ready={ready}
+        selectedModelCapability={selectedModelCapability}
+        onAttachFiles={handleFiles}
+        budgetExceeded={budgetExceeded}
+      />
+    </div>
+  );
+}
+
+// Deliverable: polished empty state when no messages are present and an active
+// chat exists. Shows a welcoming headline, project-aware subhead, and 2–3
+// starter-prompt buttons that prefill the composer draft.
+interface EmptyComposerStateProps {
+  readonly session: ChatSessionApi;
+  readonly noEligibleModels: boolean;
+}
+
+function EmptyComposerState({ session, noEligibleModels }: EmptyComposerStateProps): ReactNode {
+  const { activeProject, setDraft } = session;
+  const prompts = starterPrompts(activeProject);
+  return (
+    <div className="chatw-empty">
+      <h2 className="chatw-empty-headline">Start a Keiko conversation</h2>
+      <p className="chatw-empty-sub">
+        {activeProject !== undefined
+          ? `Working in ${activeProject.name}. What would you like to explore?`
+          : "Pick a project from the sidebar to scope your workspace, or ask anything below."}
+      </p>
+      {/* Starter prompts are only useful when a model is available */}
+      {!noEligibleModels ? (
+        <div className="chatw-empty-prompts" aria-label="Starter prompts">
+          {prompts.map((prompt) => (
+            <button type="button" key={prompt} className="suggest" onClick={() => setDraft(prompt)}>
+              <Icons.spark size={12} style={{ color: "var(--accent)" }} />
+              {prompt}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Rendered when no chat has been selected yet (activeChat is undefined).
+// Instructs the user to pick or start a chat from the project sidebar.
+function NoChatState(): ReactNode {
+  return (
+    <div className="chatw-empty-no-chat">
+      <div className="chatw-empty-no-chat-icon" aria-hidden="true">
+        <Icons.spark size={20} />
+      </div>
+      <p className="chatw-empty-no-chat-label">Pick or start a chat</p>
+      <p className="chatw-empty-no-chat-hint">
+        Select a conversation from the project sidebar, or create a new one to get started.
+      </p>
     </div>
   );
 }
@@ -197,7 +536,7 @@ function ChatHero({
         </button>
       </div>
       <div className="cmp-suggest">
-        {SUGGESTIONS.map((prompt) => (
+        {starterPrompts(activeProject).map((prompt) => (
           <button type="button" key={prompt} className="suggest" onClick={() => setDraft(prompt)}>
             <Icons.spark size={12} style={{ color: "var(--accent)" }} /> {prompt}
           </button>
@@ -234,10 +573,10 @@ function MiniChat({
           disabled={loading || sending}
         />
         <button
-          type="submit"
+          type={ready ? "submit" : "button"}
           className="cmp-send cmp-send-float"
           data-on={ready}
-          disabled={!ready}
+          aria-disabled={!ready}
           aria-label="Send message"
           title="Send"
         >
@@ -298,9 +637,7 @@ function LocalKnowledgeScopeControl({
           fetchCapsuleSets().catch(() => ({ capsuleSets: [] })),
         ]);
         if (cancelled) return;
-        setCapsules(
-          capsuleResponse.capsules.filter((entry) => entry.lifecycleState === "ready"),
-        );
+        setCapsules(capsuleResponse.capsules.filter((entry) => entry.lifecycleState === "ready"));
         setCapsuleSets(capsuleSetResponse.capsuleSets);
       } catch (caught) {
         if (!cancelled) setError(formatScopeUpdateError(caught));
@@ -465,13 +802,15 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
     loading,
     sending,
     error,
+    noEligibleModels,
     sendMessage,
     cancelGrounded,
     activeChat,
     replaceChat,
     latestGrounded,
   } = session;
-  const ready = draft.trim().length > 0 && !sending && !loading;
+  // AC #1: block ready when no model is available — do not allow submission.
+  const ready = draft.trim().length > 0 && !sending && !loading && !noEligibleModels;
   const visible = visibleOnly(messages);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -487,6 +826,7 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
         {activeChat !== undefined ? (
           <ChatScopeHeader chat={activeChat} onChatChanged={replaceChat} />
         ) : null}
+        {noEligibleModels ? <NoModelAlert /> : null}
         <MiniChat session={session} ready={ready} />
       </div>
     );
@@ -498,9 +838,24 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
       {activeChat !== undefined ? (
         <ChatScopeHeader chat={activeChat} onChatChanged={replaceChat} />
       ) : null}
+      {noEligibleModels ? (
+        <div className="chatw-foot">
+          <NoModelAlert />
+        </div>
+      ) : null}
+      {/* AC #3: loading status — polite live region, non-technical wording */}
+      {loading ? (
+        <div className="chatw-foot">
+          <LoadingStatus />
+        </div>
+      ) : null}
       <div className="chatw-scroll" ref={scrollRef} aria-live="polite">
         {visible.length === 0 ? (
-          <ChatHero session={session} ready={ready} />
+          activeChat !== undefined ? (
+            <EmptyComposerState session={session} noEligibleModels={noEligibleModels} />
+          ) : (
+            <NoChatState />
+          )
         ) : (
           <div className="chatw-log">
             {visible.map((message) => (
@@ -550,7 +905,32 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
         </div>
       ) : null}
 
-      {visible.length === 0 && error !== undefined ? (
+      {/* Composer for empty state with active chat — the EmptyComposerState shows the
+          welcoming content above, and the form wraps the input below. */}
+      {visible.length === 0 && activeChat !== undefined ? (
+        <div className="chatw-foot">
+          <form
+            className="composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void sendMessage();
+            }}
+          >
+            <ComposerCore
+              session={session}
+              ready={ready}
+              placeholder={loading ? "Connecting to your gateway…" : "Ask Keiko about your code…"}
+            />
+            {error !== undefined ? (
+              <div role="alert" className="cmp-err">
+                {error}
+              </div>
+            ) : null}
+          </form>
+        </div>
+      ) : null}
+
+      {visible.length === 0 && error !== undefined && activeChat === undefined ? (
         <div className="chatw-foot">
           <div role="alert" className="cmp-err">
             {error}

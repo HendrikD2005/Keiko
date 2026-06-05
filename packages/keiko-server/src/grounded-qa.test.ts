@@ -102,6 +102,9 @@ function customModelConfig(modelId = CHAT_MODEL): GatewayConfig {
         toolCalling: true,
         structuredOutput: true,
         streaming: true,
+        supportsImageInput: false,
+        supportsDocumentInput: false,
+        workflowEligible: false,
         costClass: "medium",
         latencyClass: "standard",
         throughputHint: "test endpoint",
@@ -703,7 +706,11 @@ describe("handleGroundedAsk", () => {
     const adapter = scriptedAdapter();
     const result = await handleGroundedAsk(
       ctx(JSON.stringify({ chatId: chat.id, content: "What is alpha?" })),
-      deps(failingModel("model offline"), {}, { uiDbPath, localKnowledgeEmbeddingRequest: adapter.request }),
+      deps(
+        failingModel("model offline"),
+        {},
+        { uiDbPath, localKnowledgeEmbeddingRequest: adapter.request },
+      ),
     );
     expect(result.status).toBe(500);
     const verify = openKnowledgeStore({
@@ -836,7 +843,10 @@ describe("handleGroundedAsk", () => {
     );
     expect(result.status).toBe(200);
     const answer = asConnectedAnswer(result.body as GroundedAnswer);
-    expect(answer.citations.map((citation) => citation.scopePath)).toEqual(["src/bar.ts", "src/foo.ts"]);
+    expect(answer.citations.map((citation) => citation.scopePath)).toEqual([
+      "src/bar.ts",
+      "src/foo.ts",
+    ]);
   });
 
   // Case 3 companion fixture: when the orchestrator reports no evidence, the route must preserve

@@ -12,10 +12,34 @@ export type {
   LatencyClass,
   ModelKind,
   ModelCapability,
+  ConversationIneligibilityReason,
   UsageMetadata,
   WorkflowDescriptor,
   WorkflowInputSpec,
 } from "@oscharko-dev/keiko-contracts";
+
+// Issue #144 / Epic #142: pure conversation-eligibility helpers re-exported
+// from keiko-contracts. UI cannot import from keiko-model-gateway (ADR-0019
+// trust-3, error severity); contracts is the legitimate value-import source
+// for browser-tier code.
+export {
+  isConversationEligibleModel,
+  explainConversationIneligibility,
+} from "@oscharko-dev/keiko-contracts";
+
+// Issue #151 / Epic #142: pure conversation-budget estimator. The Conversation
+// Center context-pressure indicator and "clear history" affordance derive from
+// this on every render. Token counts are APPROXIMATE (bytes/4) by construction
+// — UI copy and tests must state this precisely.
+export type {
+  ConversationBudgetBreakdown,
+  ConversationBudgetDocumentContext,
+  ConversationBudgetEstimate,
+  ConversationBudgetInputs,
+  ConversationBudgetMessage,
+  ConversationBudgetPressure,
+} from "@oscharko-dev/keiko-contracts";
+export { estimateConversationBudget } from "@oscharko-dev/keiko-contracts";
 
 // ─── Workspace summary + context pack ──────────────────────────────────────────────
 export type {

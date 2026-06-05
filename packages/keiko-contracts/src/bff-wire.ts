@@ -206,6 +206,48 @@ export interface DesktopChatSendResponse {
   readonly usage?: DesktopChatSendUsage;
 }
 
+// Issue #148 — Safe document context extraction for conversation inputs.
+// One wire entry per attached document the UI has extracted text from. The server passes the
+// `text` field through into a structured prompt block — it does NOT re-extract from disk
+// (the server-side modality guard is owned by issue #149). `displayName` is the file basename
+// only; absolute filesystem paths NEVER cross this wire (AC #4 of issue #147).
+export interface ConversationDocumentContextWire {
+  readonly id: string;
+  readonly displayName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly extractedBytes: number;
+  readonly truncated: boolean;
+  readonly truncationMarker?: string | undefined;
+  readonly text: string;
+}
+
+// Issue #149 — descriptor for a single image/document attachment carried on the conversation
+// send path. Only kind/mime/size metadata travels here; bytes are not on this wire. The server
+// validator enforces modality + mime allowlist + per-attachment size cap before any model is
+// invoked.
+export interface ConversationAttachmentDescriptorWire {
+  readonly id: string;
+  readonly kind: "image" | "document";
+  readonly name: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
+// Issue #148 — wire shape for POST /api/desktop/chat. Authored here (not inside keiko-server)
+// so the UI and the server share a single source of truth for the send payload. Existing
+// callers that omit `documentContext` or `attachments` keep working — both fields are optional
+// and additive. `attachments` was already parsed and validated by the server (PR #367 review);
+// this field exposes it on the typed wire so the UI compiles against the same surface.
+export interface DesktopChatSendRequestWire {
+  readonly chatId: string;
+  readonly projectPath: string;
+  readonly content: string;
+  readonly modelId?: string | undefined;
+  readonly documentContext?: readonly ConversationDocumentContextWire[] | undefined;
+  readonly attachments?: readonly ConversationAttachmentDescriptorWire[] | undefined;
+}
+
 // ─── Gateway safe-config projection (BFF /api/gateway/config) ─────────────────────
 // Sanitised mirror of GatewayConfig with NO apiKey / NO baseUrl / NO additionalHeaders.
 // Authored here (not in gateway.ts) because the credential-bearing GatewayConfig in
@@ -466,6 +508,14 @@ export type BffErrorCode =
   | "WORKSPACE_PATH_DENIED"
   | "WORKSPACE_PATH_ESCAPE"
   | "WORKSPACE_READ_FAILED"
+  // Issue #149 (Epic #142) — Conversation Center server-side modality guardrails. The
+  // browser surfaces these codes via the existing `gw-error` envelope; messages are static
+  // English strings (no echoing of model ids, file names, or byte counts) so they pass
+  // through the BFF redactor without leaking any caller-supplied value.
+  | "CONVERSATION_UNAVAILABLE_MODEL"
+  | "CONVERSATION_UNSUPPORTED_MODALITY"
+  | "CONVERSATION_UNSUPPORTED_FILE_TYPE"
+  | "CONVERSATION_OVERSIZED_CONTEXT"
   | "INTERNAL";
 
 // The wire shape carries `code: string` — the BFF can emit codes outside the BffErrorCode union

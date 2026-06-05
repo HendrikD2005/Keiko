@@ -24,6 +24,7 @@ import {
   type WindowType,
 } from "../windows/WindowsRegistry";
 import { PermControl, type Cfg, type CfgValue } from "./PermControl";
+import { isWorkflowEligibleModel } from "../../../../lib/workflow-eligibility";
 
 interface NewWindowDialogProps {
   readonly type: WindowType;
@@ -206,13 +207,17 @@ function splitPaths(value: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-function chooseDefaultModel(models: readonly ModelCapability[]): string {
-  return (models.find((model) => model.id === "example-chat-model") ?? models[0])?.id ?? "";
+// AC #4: no longer prefers a placeholder id — use the first available model.
+// When models is empty, returns "" (handled by the caller via `current || ...`).
+export function chooseDefaultModel(models: readonly ModelCapability[]): string {
+  return models[0]?.id ?? "";
 }
 
-export function isAgentWorkflowModel(model: ModelCapability): boolean {
-  return model.kind === "chat" && model.toolCalling && model.structuredOutput;
-}
+// Issue #153 — single source of truth lives in @/lib/workflow-eligibility so the in-chat
+// launcher (ChatWindow → WorkflowHandoff) and this legacy modal cannot drift. The thin
+// alias below preserves the historical `isAgentWorkflowModel` export name so the existing
+// NewWindowDialog.test imports keep resolving.
+export const isAgentWorkflowModel = isWorkflowEligibleModel;
 
 function toPosix(value: string): string {
   return value.replaceAll("\\", "/");
