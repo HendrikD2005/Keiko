@@ -21,7 +21,10 @@ import type { RouteContext } from "./routes.js";
 import {
   handleDeleteLocalKnowledgeCapsule,
   handleCancelLocalKnowledgeCapsuleIndexing,
+  handleConnectLocalKnowledgeCapsule,
   handleCreateLocalKnowledgeCapsule,
+  handleCreateLocalKnowledgeCapsuleSet,
+  handleUpdateLocalKnowledgeCapsule,
   handleDisconnectLocalKnowledgeCapsule,
   handleGetLocalKnowledgeCapsule,
   handleListLocalKnowledgeCapsules,
@@ -141,6 +144,223 @@ afterEach(() => {
 });
 
 describe("local-knowledge handlers", () => {
+  it("connects a folder source to a capsule so it can be indexed", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const docsRoot = join(tmp, "manuals");
+    mkdirSync(docsRoot, { recursive: true });
+    writeFileSync(join(docsRoot, "guide.md"), "# Guide\n", "utf8");
+
+    const result = await handleConnectLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "POST", {
+          scope: { kind: "folder", rootPath: docsRoot, recursive: true },
+          displayName: "Manuals",
+        }),
+        params: { capsuleId: "cap-1" },
+      },
+      depsFor(tmp),
+    );
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    // The freshly attached source is surfaced in the capsule detail body.
+    expect(JSON.stringify(result.body)).toContain("Manuals");
+  });
+
+  it("refuses a source path in a denied location (deny list)", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const deniedRoot = join(tmp, ".ssh");
+    mkdirSync(deniedRoot, { recursive: true });
+
+    const result = await handleConnectLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "POST", {
+          scope: { kind: "folder", rootPath: deniedRoot, recursive: true },
+        }),
+        params: { capsuleId: "cap-1" },
+      },
+      depsFor(tmp),
+    );
+
+    expect(result.status).toBe(400);
+    expect(JSON.stringify(result.body)).toContain("denied");
+  });
+
+  it("refuses a non-existent source path", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+
+    const result = await handleConnectLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "POST", {
+          scope: { kind: "folder", rootPath: join(tmp, "no-such-dir"), recursive: true },
+        }),
+        params: { capsuleId: "cap-1" },
+      },
+      depsFor(tmp),
+    );
+
+    expect(result.status).toBe(400);
+  });
+
+  it("returns 404 when connecting a source to a missing capsule", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const docsRoot = join(tmp, "manuals");
+    mkdirSync(docsRoot, { recursive: true });
+
+    const result = await handleConnectLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "POST", {
+          scope: { kind: "folder", rootPath: docsRoot, recursive: true },
+        }),
+        params: { capsuleId: "cap-missing" },
+      },
+      depsFor(tmp),
+    );
+
+    expect(result.status).toBe(404);
+  });
+
+  it("composes a non-destructive capsule set from existing capsules", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "Quarterly Review", capsuleIds: ["cap-1"] }),
+      depsFor(tmp),
+    );
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(result.body).toMatchObject({
+      capsuleSet: { displayName: "Quarterly Review", capsuleCount: 1, capsuleIds: ["cap-1"] },
+    });
+    // Non-destructive: the member capsule is unchanged (still resolvable on its own).
+    const detail = await handleGetLocalKnowledgeCapsule(
+      { ...baseCtx(tmp, "GET"), params: { capsuleId: "cap-1" } },
+      depsFor(tmp),
+    );
+    expect(detail.status).toBe(200);
+  });
+
+  it("rejects a capsule set with an empty displayName", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "   ", capsuleIds: ["cap-1"] }),
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("rejects a capsule set with an empty capsuleIds array", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "Set", capsuleIds: [] }),
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("rejects a capsule set with duplicate capsule ids", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "Set", capsuleIds: ["cap-1", "cap-1"] }),
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("rejects a capsule set exceeding the member cap", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const tooMany = Array.from({ length: 17 }, (_, i) => `cap-${String(i)}`);
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "Set", capsuleIds: tooMany }),
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("returns 404 when a capsule set references an unknown capsule", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleCreateLocalKnowledgeCapsuleSet(
+      baseCtx(tmp, "POST", { displayName: "Set", capsuleIds: ["cap-does-not-exist"] }),
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(404);
+  });
+
+  it("renames a capsule via PATCH (displayName + description)", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleUpdateLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "PATCH", { displayName: "Renamed Capsule", description: "Updated desc" }),
+        params: { capsuleId: "cap-1" },
+      },
+      depsFor(tmp),
+    );
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(result.body).toMatchObject({
+      capsule: { displayName: "Renamed Capsule", description: "Updated desc" },
+    });
+  });
+
+  it("rejects an empty capsule PATCH (no displayName or description)", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleUpdateLocalKnowledgeCapsule(
+      { ...baseCtx(tmp, "PATCH", {}), params: { capsuleId: "cap-1" } },
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("rejects a metadata-only capsule PATCH (metadata persistence not yet supported)", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleUpdateLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "PATCH", { metadata: { team: "platform" } }),
+        params: { capsuleId: "cap-1" },
+      },
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(400);
+  });
+
+  it("returns 404 when PATCHing a missing capsule", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
+    tempDirs.push(tmp);
+    seedStore(tmp).store.close();
+    const result = await handleUpdateLocalKnowledgeCapsule(
+      {
+        ...baseCtx(tmp, "PATCH", { displayName: "X" }),
+        params: { capsuleId: "cap-missing" },
+      },
+      depsFor(tmp),
+    );
+    expect(result.status).toBe(404);
+  });
+
   it("creates a draft capsule with the default Local Knowledge policy", async () => {
     const tmp = mkdtempSync(join(tmpdir(), "keiko-lk-"));
     tempDirs.push(tmp);

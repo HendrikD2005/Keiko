@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import type { IncomingMessage } from "node:http";
 import {
+  addSourceToCapsule,
+  composeCapsules,
+  CompositionError,
   createSqliteAuditSink,
   createDefaultParserRegistry,
   createCapsule,
@@ -15,20 +18,26 @@ import {
   removeSourceFromCapsule,
   resolveKnowledgeStorePath,
   runIndexingJob,
+  updateCapsuleDetails,
   updateCapsuleState,
+  type CapsuleDetailsPatch,
 } from "@oscharko-dev/keiko-local-knowledge";
 import type {
   CapsuleHealth,
   DocumentId,
   IndexingJobRecord,
   KnowledgeCapsule,
+  KnowledgeCapsuleId,
   KnowledgeSource,
   KnowledgeSourceId,
   ParserDiagnostic,
   KnowledgeSourceScope,
 } from "@oscharko-dev/keiko-contracts";
 import { KnowledgeNotFoundError, KnowledgeStoreError } from "@oscharko-dev/keiko-local-knowledge";
-import { validateKnowledgeSourceScope } from "@oscharko-dev/keiko-contracts";
+import {
+  CAPSULE_SET_MAX_MEMBERS,
+  validateKnowledgeSourceScope,
+} from "@oscharko-dev/keiko-contracts";
 import { currentGatewayConfig, type UiHandlerDeps } from "./deps.js";
 import type { RouteContext, RouteResult } from "./routes.js";
 import { errorBody } from "./routes.js";
@@ -40,6 +49,7 @@ import {
   type OpenAIEmbeddingRequest,
 } from "@oscharko-dev/keiko-model-gateway";
 import { nodeWorkspaceFs } from "@oscharko-dev/keiko-workspace/internal/fs";
+import { isDenied } from "@oscharko-dev/keiko-workspace";
 
 const MAX_BODY_BYTES = 32_000;
 // F4 (Epic #189): cap unbounded BFF response collections so a worst-case capsule with
@@ -940,6 +950,137 @@ export async function handleListLocalKnowledgeCapsuleSets(
   });
 }
 
+// ─── Create a capsule set (Slice 4 / Issue #189) — non-destructive composition ──
+
+function parseSetCapsuleIds(raw: unknown): readonly KnowledgeCapsuleId[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new InvalidRequest('Field "capsuleIds" must be a non-empty array.');
+  }
+  if (raw.length > CAPSULE_SET_MAX_MEMBERS) {
+    throw new InvalidRequest(
+      `A capsule set may reference at most ${String(CAPSULE_SET_MAX_MEMBERS)} capsules.`,
+    );
+  }
+  const seen = new Set<string>();
+  const capsuleIds: KnowledgeCapsuleId[] = [];
+  for (const id of raw) {
+    if (typeof id !== "string" || id.trim().length === 0) {
+      throw new InvalidRequest('Every "capsuleIds" entry must be a non-empty string.');
+    }
+    if (seen.has(id)) {
+      throw new InvalidRequest(`Duplicate capsule id in the set request: ${id}.`);
+    }
+    seen.add(id);
+    capsuleIds.push(id as KnowledgeCapsuleId);
+  }
+  return capsuleIds;
+}
+
+function parseCreateCapsuleSetInput(body: Record<string, unknown>): {
+  readonly displayName: string;
+  readonly description?: string;
+  readonly capsuleIds: readonly KnowledgeCapsuleId[];
+} {
+  const displayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
+  if (displayName.length === 0) {
+    throw new InvalidRequest('Field "displayName" must be a non-empty string.');
+  }
+  const capsuleIds = parseSetCapsuleIds(body.capsuleIds);
+  const description =
+    typeof body.description === "string" && body.description.trim().length > 0
+      ? body.description.trim()
+      : undefined;
+  return description === undefined
+    ? { displayName, capsuleIds }
+    : { displayName, description, capsuleIds };
+}
+
+export async function handleCreateLocalKnowledgeCapsuleSet(
+  ctx: RouteContext,
+  deps: UiHandlerDeps,
+): Promise<RouteResult> {
+  return runHandler(async () => {
+    const input = parseCreateCapsuleSetInput(await readJsonObject(ctx.req));
+    const env = openStoreForDeps(deps);
+    try {
+      const set = composeCapsules(env.store, {
+        displayName: input.displayName,
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        capsuleIds: input.capsuleIds,
+      });
+      return {
+        status: 201,
+        body: {
+          capsuleSet: {
+            id: set.id,
+            displayName: set.displayName,
+            ...(set.description !== undefined ? { description: set.description } : {}),
+            capsuleIds: set.capsuleIds,
+            capsuleCount: set.capsuleIds.length,
+            composedAt: set.composedAt,
+          },
+        },
+      };
+    } catch (error) {
+      if (error instanceof CompositionError) {
+        return badRequest("INVALID_REQUEST", error.message);
+      }
+      throw error;
+    } finally {
+      env.close();
+    }
+  });
+}
+
+// ─── Update a capsule's display name / description (Slice 4 / Issue #189) ───────
+// Metadata persistence requires a schema migration and is intentionally NOT supported here yet;
+// a metadata-bearing patch is rejected with a clear 400 rather than silently dropped.
+
+function parseUpdateCapsuleInput(body: Record<string, unknown>): CapsuleDetailsPatch {
+  if (body.metadata !== undefined) {
+    throw new InvalidRequest(
+      "Capsule metadata updates are not yet supported; update displayName or description.",
+    );
+  }
+  const patch: { displayName?: string; description?: string } = {};
+  if (body.displayName !== undefined) {
+    if (typeof body.displayName !== "string" || body.displayName.trim().length === 0) {
+      throw new InvalidRequest('Field "displayName" must be a non-empty string when provided.');
+    }
+    patch.displayName = body.displayName.trim();
+  }
+  if (body.description !== undefined) {
+    if (typeof body.description !== "string") {
+      throw new InvalidRequest('Field "description" must be a string when provided.');
+    }
+    patch.description = body.description.trim();
+  }
+  if (patch.displayName === undefined && patch.description === undefined) {
+    throw new InvalidRequest("Patch must include displayName or description.");
+  }
+  return patch;
+}
+
+export async function handleUpdateLocalKnowledgeCapsule(
+  ctx: RouteContext,
+  deps: UiHandlerDeps,
+): Promise<RouteResult> {
+  return runHandler(async () => {
+    const capsuleId = parseCapsuleId(ctx);
+    const patch = parseUpdateCapsuleInput(await readJsonObject(ctx.req));
+    const env = openStoreForDeps(deps);
+    try {
+      const capsule = updateCapsuleDetails(env.store, capsuleId, patch);
+      return {
+        status: 200,
+        body: buildCapsuleResponseBody(deps, env.store, env.dbPath, capsule),
+      };
+    } finally {
+      env.close();
+    }
+  });
+}
+
 export async function handleCreateLocalKnowledgeCapsule(
   ctx: RouteContext,
   deps: UiHandlerDeps,
@@ -1067,6 +1208,86 @@ export async function handleCancelLocalKnowledgeCapsuleIndexing(
         );
       }
       return actionResponse(capsule.id);
+    } finally {
+      env.close();
+    }
+  });
+}
+
+// ─── Connect a source folder to a capsule (Epic #189) ─────────────────────────
+// A connector's entry point: attach a host folder (or file set) as a knowledge source
+// so it can be indexed. Connectors deliberately reach OUTSIDE the workspace (the product
+// connects ANY machine folder of manuals), so containment is by realpath + the always-on
+// deny list (never index ~/.ssh, ~/.aws, .git, …) — not a workspace root. Per-file size
+// and format limits are enforced later by the indexing discovery walk.
+
+function connectScopeRootPath(scope: KnowledgeSourceScope): string {
+  return scope.kind === "folder" || scope.kind === "files" ? scope.rootPath : scope.repositoryRoot;
+}
+
+function parseConnectSourceInput(body: Record<string, unknown>): {
+  readonly scope: KnowledgeSourceScope;
+  readonly displayName: string;
+} {
+  const scopeRaw = body.scope;
+  if (typeof scopeRaw !== "object" || scopeRaw === null || Array.isArray(scopeRaw)) {
+    throw new InvalidRequest('Field "scope" must be a knowledge-source scope object.');
+  }
+  const scope = scopeRaw as KnowledgeSourceScope;
+  assertScopeShape(scope);
+  const displayNameRaw = body.displayName;
+  const displayName =
+    typeof displayNameRaw === "string" && displayNameRaw.trim().length > 0
+      ? displayNameRaw.trim()
+      : basename(connectScopeRootPath(scope));
+  return { scope, displayName };
+}
+
+// Canonicalize (realpath) then refuse denied locations and non-directory roots BEFORE
+// touching the store. realpath resolves symlinks so a link into ~/.ssh cannot slip past.
+function guardConnectorSourcePath(scope: KnowledgeSourceScope): KnowledgeSourceScope {
+  const canonical = canonicalizeScopeRoot(scope);
+  const root = connectScopeRootPath(canonical);
+  if (isDenied(root)) {
+    throw new InvalidRequest("Source path is in a denied location and cannot be indexed.");
+  }
+  let stats: ReturnType<typeof statSync>;
+  try {
+    stats = statSync(root);
+  } catch {
+    throw new InvalidRequest("Source path does not exist or is not accessible.");
+  }
+  if (!stats.isDirectory()) {
+    throw new InvalidRequest("Source path must be an existing directory.");
+  }
+  return canonical;
+}
+
+export async function handleConnectLocalKnowledgeCapsule(
+  ctx: RouteContext,
+  deps: UiHandlerDeps,
+): Promise<RouteResult> {
+  return runHandler(async () => {
+    const capsuleId = parseCapsuleId(ctx);
+    const { scope, displayName } = parseConnectSourceInput(await readJsonObject(ctx.req));
+    const guarded = guardConnectorSourcePath(scope);
+    const env = openStoreForDeps(deps);
+    try {
+      const capsule = getCapsule(env.store, capsuleId);
+      if (capsule === undefined) {
+        return notFound(`Capsule not found: ${capsuleId}`);
+      }
+      addSourceToCapsule(env.store, capsule.id, {
+        id: randomUUID() as KnowledgeSourceId,
+        displayName,
+        tags: [],
+        scope: guarded,
+      });
+      const updated = getCapsule(env.store, capsule.id) ?? capsule;
+      return {
+        status: 201,
+        body: buildCapsuleResponseBody(deps, env.store, env.dbPath, updated),
+      };
     } finally {
       env.close();
     }

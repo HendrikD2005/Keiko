@@ -84,7 +84,9 @@ import {
 } from "./browser.js";
 import {
   handleCancelLocalKnowledgeCapsuleIndexing,
+  handleConnectLocalKnowledgeCapsule,
   handleCreateLocalKnowledgeCapsule,
+  handleCreateLocalKnowledgeCapsuleSet,
   handleDeleteLocalKnowledgeCapsule,
   handleDisconnectLocalKnowledgeCapsule,
   handleGetLocalKnowledgeCapsule,
@@ -92,6 +94,7 @@ import {
   handleListLocalKnowledgeCapsuleSets,
   handleReindexLocalKnowledgeCapsule,
   handleStartLocalKnowledgeCapsuleIndexing,
+  handleUpdateLocalKnowledgeCapsule,
 } from "./local-knowledge-handlers.js";
 import {
   handleRelationshipCreate,
@@ -230,9 +233,19 @@ export const API_ROUTES: readonly RouteDefinition[] = [
     handler: handleListLocalKnowledgeCapsuleSets,
   },
   {
+    method: "POST",
+    pattern: "/api/local-knowledge/capsule-sets",
+    handler: handleCreateLocalKnowledgeCapsuleSet,
+  },
+  {
     method: "GET",
     pattern: "/api/local-knowledge/capsules/:capsuleId",
     handler: handleGetLocalKnowledgeCapsule,
+  },
+  {
+    method: "PATCH",
+    pattern: "/api/local-knowledge/capsules/:capsuleId",
+    handler: handleUpdateLocalKnowledgeCapsule,
   },
   {
     method: "POST",
@@ -243,6 +256,11 @@ export const API_ROUTES: readonly RouteDefinition[] = [
     method: "DELETE",
     pattern: "/api/local-knowledge/capsules/:capsuleId/index",
     handler: handleCancelLocalKnowledgeCapsuleIndexing,
+  },
+  {
+    method: "POST",
+    pattern: "/api/local-knowledge/capsules/:capsuleId/connection",
+    handler: handleConnectLocalKnowledgeCapsule,
   },
   {
     method: "DELETE",
@@ -437,7 +455,9 @@ export function matchRoute(
     if (params === undefined) {
       continue;
     }
-    const specificity = definition.pattern.split("/").filter((part) => !part.startsWith(":")).length;
+    const specificity = definition.pattern
+      .split("/")
+      .filter((part) => !part.startsWith(":")).length;
     if (definition.method === method) {
       if (specificity > bestMethodSpecificity) {
         bestMethodSpecificity = specificity;
@@ -449,10 +469,7 @@ export function matchRoute(
       bestOtherMethodSpecificity = specificity;
     }
   }
-  if (
-    bestMethodMatch !== undefined &&
-    bestMethodSpecificity >= bestOtherMethodSpecificity
-  ) {
+  if (bestMethodMatch !== undefined && bestMethodSpecificity >= bestOtherMethodSpecificity) {
     return bestMethodMatch;
   }
   return bestOtherMethodSpecificity >= 0 ? "method-not-allowed" : undefined;
