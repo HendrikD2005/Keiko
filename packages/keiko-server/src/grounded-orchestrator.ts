@@ -38,8 +38,9 @@ import {
 } from "@oscharko-dev/keiko-workflows";
 import {
   DEFAULT_SEARCH_LIMITS,
+  FileTooLargeError,
   RepoSearchUnsupportedFileError,
-  detectWorkspace,
+  detectWorkspaceAt,
   gitHistoryAdapter,
   importGraphAdapter,
   readExcerpt,
@@ -88,6 +89,16 @@ export interface OrchestratorOutput {
   readonly assistantContent: string;
   readonly elapsedMs: number;
   readonly plan?: ExplorationPlan;
+}
+
+// Epic #532 — retrieval-only output. The multi-source (1+N) path runs retrieval per connected
+// source, then answers ONCE over the merged packs, so it needs the pack without a per-scope
+// answer. `elapsedMs` here is retrieval-only wall time (no model call), distinct from
+// OrchestratorOutput.elapsedMs which also includes the answer.
+export interface RetrievalOnlyOutput {
+  readonly pack: ConnectedContextPack;
+  readonly elapsedMs: number;
+  readonly plan: ExplorationPlan;
 }
 
 // Raised when the planner asks for clarification (no anchors, too-generic prompt, etc.). The
@@ -224,10 +235,16 @@ async function runRing(ring: RetrievalRing, inputs: SearchInputs): Promise<RingR
       fs: inputs.fs,
       nowMs: inputs.nowMs,
     });
+    // Lexical scanning is transient: each candidate file is read to match lines, then discarded.
+    // It does NOT consume the excerpt budget. Charging result.filesScanned against filesReadMax
+    // (Epic #177 retrieval defect) let a wide scan exhaust the budget the excerpt READ phase needs
+    // and starved multi-file scopes — the scan could only ever examine ~4 files. The reserved
+    // search call (one per ring) plus elapsedMs already bound the scan; the files whose content
+    // actually enters the pack are charged when their excerpts are read in the assembler.
     return {
       atoms: result.atoms,
       omitted: omittedFromSearchCandidates(result.candidates, inputs.nowMs()),
-      usage: usageDelta({ filesRead: result.filesScanned, elapsedMs: result.elapsedMs }),
+      usage: usageDelta({ elapsedMs: result.elapsedMs }),
     };
   }
   // Keep the planner's ring split authoritative: the structural ring should only run the
@@ -457,7 +474,10 @@ async function readKeptExcerpts(
         remainingBytes -= result.bytesConsumed;
       }
     } catch (error) {
-      if (error instanceof RepoSearchUnsupportedFileError) {
+      // A single unreadable file (unsupported/binary, or larger than the excerpt read cap) must
+      // degrade to a skipped excerpt, never crash the whole grounded answer. Other kept files and
+      // the rest of the pipeline continue; the file simply contributes no excerpt content.
+      if (error instanceof RepoSearchUnsupportedFileError || error instanceof FileTooLargeError) {
         continue;
       }
       throw error;
@@ -557,12 +577,16 @@ async function assembleGroundedPack({
 
 // ─── Public entry ─────────────────────────────────────────────────────────────
 
-export async function runGroundedExploration(
+// Epic #532 — retrieval-only pipeline: the ready-governed plan, workspace detection, ring run,
+// and pack assembly (the original steps 1–4) WITHOUT the model answer. `deps.answerer` is part of
+// the shared deps type but is intentionally not invoked here; the multi-source path answers once
+// over the merged packs rather than per source.
+export async function retrieveConnectedContextPack(
   input: OrchestratorInput,
   deps: OrchestratorDeps,
-): Promise<OrchestratorOutput> {
+): Promise<RetrievalOnlyOutput> {
   const fs = deps.fs ?? nodeWorkspaceFs;
-  const detect = deps.detectWorkspace ?? detectWorkspace;
+  const detect = deps.detectWorkspace ?? detectWorkspaceAt;
   const nowMs = deps.nowMs ?? Date.now;
   const start = nowMs();
   throwIfCancelled(deps.signal);
@@ -581,6 +605,19 @@ export async function runGroundedExploration(
   throwIfCancelled(deps.signal);
   const pack = await assembleGroundedPack({ input, deps, plan, rings, searchScope, fs, nowMs });
   throwIfCancelled(deps.signal);
+  return { pack, elapsedMs: Math.max(0, nowMs() - start), plan };
+}
+
+export async function runGroundedExploration(
+  input: OrchestratorInput,
+  deps: OrchestratorDeps,
+): Promise<OrchestratorOutput> {
+  // AC5 (#532): the single-source path measures its OWN total wall time (retrieval + answer) so the
+  // observable elapsedMs is byte-identical to before this split. The retrieval-only elapsed returned
+  // by retrieveConnectedContextPack is deliberately discarded here.
+  const nowMs = deps.nowMs ?? Date.now;
+  const start = nowMs();
+  const { pack, plan } = await retrieveConnectedContextPack(input, deps);
   const assistantContent = await deps.answerer.answer(input.query.text, pack);
   const elapsedMs = Math.max(0, nowMs() - start);
   return { pack, assistantContent, elapsedMs, plan };

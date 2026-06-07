@@ -1,11 +1,13 @@
 // ADR-0013 — chats CRUD scoped to a project. Parameterized SQL only.
 
 import type { DatabaseSync } from "node:sqlite";
+import { isAbsolute } from "node:path";
 import {
   SELECTED_SCOPE_KINDS,
   isValidScopePath,
   type SelectedScopeKind,
 } from "@oscharko-dev/keiko-contracts/connected-context";
+import { MAX_CONNECTED_SOURCES } from "@oscharko-dev/keiko-contracts/bff-wire";
 import type {
   Chat,
   ChatConnectedScope,
@@ -50,6 +52,10 @@ interface ChatRow {
 interface DecodedScopePayload {
   readonly kind: SelectedScopeKind;
   readonly relativePaths: readonly string[];
+  readonly root?: string;
+  // Per-scope connectedAtMs lives inside the multi-source array; absent for legacy single-object
+  // and #184 string-array rows, where the column-level connected_scope_at is authoritative.
+  readonly connectedAtMs?: number;
 }
 
 function isSelectedScopeKind(value: unknown): value is SelectedScopeKind {
@@ -86,39 +92,105 @@ function validateScopePathsForKind(
   return items;
 }
 
-function decodeConnectedScopePayload(parsed: unknown): DecodedScopePayload | undefined {
-  // PR #254 wrote legacy JSON arrays. Treat them as files scopes so existing rows survive the
-  // Issue #184 audit fix that adds explicit scope kind support.
-  if (Array.isArray(parsed)) {
-    const relativePaths = validateScopePathsForKind("files", parsed);
-    return relativePaths === undefined ? undefined : { kind: "files", relativePaths };
-  }
-  if (typeof parsed !== "object" || parsed === null) return undefined;
-  const raw = parsed as Record<string, unknown>;
-  if (!isSelectedScopeKind(raw.kind) || !Array.isArray(raw.relativePaths)) return undefined;
-  const relativePaths = validateScopePathsForKind(raw.kind, raw.relativePaths);
-  return relativePaths === undefined ? undefined : { kind: raw.kind, relativePaths };
+// Epic #532 — the connected_scope_paths column now holds EITHER a single scope object (legacy)
+// OR a JSON array of scope objects (multi-source). The Issue #184 legacy form (a bare array of
+// path strings) is still tolerated as a single files scope. Disambiguation: an array whose first
+// element is an object is the new multi-source list; an array of strings is the #184 legacy form.
+// Epic #532 audit (L2) — defense-in-depth on read. The connectedScope root is fully validated at
+// the BFF write path (realpath → deny-list → containment). On read from a possibly-tampered DB row
+// we re-assert the SHAPE the writer guarantees: an absolute path. A `root` key that is present but
+// not a non-empty absolute string is treated as tampering — the whole scope decode collapses to
+// undefined (matching the "a malformed entry can never widen the result" invariant) rather than
+// silently grounding against an attacker-chosen relative location.
+function decodeScopeRoot(raw: unknown): { readonly ok: boolean; readonly root?: string } {
+  if (raw === undefined) return { ok: true };
+  if (typeof raw === "string" && raw.length > 0 && isAbsolute(raw)) return { ok: true, root: raw };
+  return { ok: false };
 }
 
-function decodeConnectedScope(
+function decodeSingleScopeObject(raw: Record<string, unknown>): DecodedScopePayload | undefined {
+  if (!isSelectedScopeKind(raw.kind) || !Array.isArray(raw.relativePaths)) return undefined;
+  const relativePaths = validateScopePathsForKind(raw.kind, raw.relativePaths);
+  if (relativePaths === undefined) return undefined;
+  const decodedRoot = decodeScopeRoot(raw.root);
+  if (!decodedRoot.ok) return undefined;
+  const root = decodedRoot.root;
+  const connectedAtMs =
+    Number.isInteger(raw.connectedAtMs) && (raw.connectedAtMs as number) >= 0
+      ? (raw.connectedAtMs as number)
+      : undefined;
+  return {
+    kind: raw.kind,
+    relativePaths,
+    ...(root !== undefined ? { root } : {}),
+    ...(connectedAtMs !== undefined ? { connectedAtMs } : {}),
+  };
+}
+
+function decodeLegacyFilesArray(parsed: readonly unknown[]): DecodedScopePayload | undefined {
+  const relativePaths = validateScopePathsForKind("files", parsed);
+  return relativePaths === undefined ? undefined : { kind: "files", relativePaths };
+}
+
+function decodeScopeObjectArray(
+  entries: readonly unknown[],
+): readonly DecodedScopePayload[] | undefined {
+  if (entries.length > MAX_CONNECTED_SOURCES) return undefined;
+  const payloads: DecodedScopePayload[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return undefined;
+    const decoded = decodeSingleScopeObject(entry as Record<string, unknown>);
+    if (decoded === undefined) return undefined;
+    payloads.push(decoded);
+  }
+  return payloads;
+}
+
+function decodeArrayPayload(
+  parsed: readonly unknown[],
+): readonly DecodedScopePayload[] | undefined {
+  if (parsed.length === 0) return undefined;
+  if (parsed.every((entry) => typeof entry === "string")) {
+    const legacy = decodeLegacyFilesArray(parsed);
+    return legacy === undefined ? undefined : [legacy];
+  }
+  return decodeScopeObjectArray(parsed);
+}
+
+// Decodes the column payload into an ORDERED list of scope payloads. A single object yields a
+// 1-element list; an array of objects yields one entry per element. The #184 legacy string-array
+// form yields a single files scope. A tampered row can never widen the result: any malformed
+// entry collapses the whole decode to undefined. Returns undefined when nothing valid was found.
+function decodeConnectedScopePayloads(parsed: unknown): readonly DecodedScopePayload[] | undefined {
+  if (Array.isArray(parsed)) return decodeArrayPayload(parsed);
+  if (typeof parsed !== "object" || parsed === null) return undefined;
+  const single = decodeSingleScopeObject(parsed as Record<string, unknown>);
+  return single === undefined ? undefined : [single];
+}
+
+function decodeConnectedScopes(
   paths: string | null,
   connectedAt: number | null,
-): ChatConnectedScope | undefined {
+): readonly ChatConnectedScope[] | undefined {
   if (paths === null || connectedAt === null) return undefined;
+  if (!Number.isInteger(connectedAt) || connectedAt < 0) return undefined;
   let parsed: unknown;
   try {
     parsed = JSON.parse(paths);
   } catch {
     return undefined;
   }
-  const payload = decodeConnectedScopePayload(parsed);
-  if (payload === undefined) {
-    return undefined;
-  }
-  if (!Number.isInteger(connectedAt) || connectedAt < 0) {
-    return undefined;
-  }
-  return { kind: payload.kind, relativePaths: payload.relativePaths, connectedAtMs: connectedAt };
+  const payloads = decodeConnectedScopePayloads(parsed);
+  if (payloads === undefined) return undefined;
+  return payloads.map((payload) => ({
+    kind: payload.kind,
+    relativePaths: payload.relativePaths,
+    // The newest connectedAtMs lives in the column; per-scope connectedAtMs is carried inside the
+    // array (decoded below). Legacy single-object/string-array rows have no per-scope value, so the
+    // column timestamp is the authoritative one for every entry in that 1-element list.
+    connectedAtMs: payload.connectedAtMs ?? connectedAt,
+    ...(payload.root !== undefined ? { root: payload.root } : {}),
+  }));
 }
 
 function decodeLocalKnowledgeScope(raw: string | null): ChatLocalKnowledgeScope | undefined {
@@ -171,6 +243,7 @@ function decodeLocalKnowledgeScopePayload(
 
 function rowToChat(row: ChatRow): Chat {
   const status = row.status === null ? undefined : (row.status as "open" | "closed");
+  const connectedScopes = decodeConnectedScopes(row.connected_scope_paths, row.connected_scope_at);
   return {
     id: row.id,
     projectPath: row.project_path,
@@ -178,7 +251,11 @@ function rowToChat(row: ChatRow): Chat {
     selectedModel: row.selected_model,
     branchLabel: row.branch_label ?? undefined,
     status,
-    connectedScope: decodeConnectedScope(row.connected_scope_paths, row.connected_scope_at),
+    // Epic #532 — populate BOTH the canonical list and the back-compat single field
+    // (= list[0]). Absent binding → both undefined.
+    ...(connectedScopes !== undefined && connectedScopes.length > 0
+      ? { connectedScopes, connectedScope: connectedScopes[0] }
+      : { connectedScope: undefined }),
     localKnowledgeScope: decodeLocalKnowledgeScope(row.local_knowledge_scope_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -356,6 +433,27 @@ function validatePatchScope(scope: unknown): void {
   validateConnectedScopeShape(scope as ChatConnectedScope);
 }
 
+// Epic #532 — validate the multi-source list. Each entry runs the same defense-in-depth shape
+// check as the single field; the list is bounded by MAX_CONNECTED_SOURCES (a strict subset of the
+// BFF gate). undefined/null are pass-through (leave-unchanged / clear-all).
+function validatePatchScopes(scopes: unknown): void {
+  if (scopes === undefined || scopes === null) return;
+  if (!Array.isArray(scopes)) {
+    throw invalidRequest("connectedScopes must be an array or null.");
+  }
+  if (scopes.length > MAX_CONNECTED_SOURCES) {
+    throw invalidRequest(
+      `connectedScopes must contain at most ${String(MAX_CONNECTED_SOURCES)} sources.`,
+    );
+  }
+  for (const scope of scopes) {
+    if (typeof scope !== "object" || scope === null || Array.isArray(scope)) {
+      throw invalidRequest("connectedScopes entries must be objects.");
+    }
+    validateConnectedScopeShape(scope as ChatConnectedScope);
+  }
+}
+
 function validatePatchLocalKnowledgeScope(scope: unknown): void {
   if (scope === undefined || scope === null) return;
   if (typeof scope !== "object" || Array.isArray(scope)) {
@@ -371,7 +469,24 @@ function validateChatPatch(patch: UpdateChatPatch): void {
     throw invalidRequest("Invalid status.");
   }
   validatePatchScope(patch.connectedScope);
+  validatePatchScopes(patch.connectedScopes);
   validatePatchLocalKnowledgeScope(patch.localKnowledgeScope);
+}
+
+// Epic #532 — resolve the effective scope-patch intent. `connectedScopes` SUPERSEDES the legacy
+// single `connectedScope`: when the list field is present (including null), it wins. A single
+// `connectedScope` object is normalized to a 1-element list. Returns undefined (leave unchanged),
+// null (clear all), or the ordered list to persist.
+function resolveScopePatch(
+  patch: UpdateChatPatch,
+): readonly ChatConnectedScope[] | null | undefined {
+  if (patch.connectedScopes !== undefined) {
+    if (patch.connectedScopes === null || patch.connectedScopes.length === 0) return null;
+    return patch.connectedScopes;
+  }
+  if (patch.connectedScope === undefined) return undefined;
+  if (patch.connectedScope === null) return null;
+  return [patch.connectedScope];
 }
 
 // Issue #184 — three-state encoding of the scope patch for SQL parameter binding.
@@ -382,13 +497,40 @@ interface ScopeUpdateParams {
   readonly connectedAtMs: number | null;
 }
 
-function scopeUpdateParams(value: ChatConnectedScope | null | undefined): ScopeUpdateParams {
+function encodeScopeObject(value: ChatConnectedScope): Record<string, unknown> {
+  return {
+    kind: value.kind,
+    relativePaths: value.relativePaths,
+    // Epic #532 — persist the optional scope root (a folder outside the chat's project) inside the
+    // existing connected_scope_paths JSON column, so no schema migration is needed.
+    ...(value.root !== undefined ? { root: value.root } : {}),
+    // Per-scope connectedAtMs is carried inside the array so each source keeps its own connect time;
+    // the column-level connected_scope_at holds the newest value (for legacy single-object readers).
+    connectedAtMs: value.connectedAtMs,
+  };
+}
+
+// Epic #532 — encode the resolved scope-patch intent. A single source encodes as the legacy single
+// object (byte-identical to the pre-#532 single-source form, so back-compat decode is unchanged); a
+// multi-source list encodes as a JSON array. connected_scope_at = newest per-scope connectedAtMs.
+function scopeUpdateParams(
+  value: readonly ChatConnectedScope[] | null | undefined,
+): ScopeUpdateParams {
   if (value === undefined) return { apply: 0, pathsJson: null, connectedAtMs: null };
-  if (value === null) return { apply: 1, pathsJson: null, connectedAtMs: null };
+  if (value === null || value.length === 0) {
+    return { apply: 1, pathsJson: null, connectedAtMs: null };
+  }
+  const newestConnectedAtMs = value.reduce((max, scope) => Math.max(max, scope.connectedAtMs), 0);
+  const first = value[0];
+  if (value.length === 1 && first !== undefined) {
+    const single = encodeScopeObject(first);
+    delete single.connectedAtMs;
+    return { apply: 1, pathsJson: JSON.stringify(single), connectedAtMs: first.connectedAtMs };
+  }
   return {
     apply: 1,
-    pathsJson: JSON.stringify({ kind: value.kind, relativePaths: value.relativePaths }),
-    connectedAtMs: value.connectedAtMs,
+    pathsJson: JSON.stringify(value.map(encodeScopeObject)),
+    connectedAtMs: newestConnectedAtMs,
   };
 }
 
@@ -434,7 +576,7 @@ export function updateChat(
   const modelParam = patch.selectedModel ?? null;
   const branchParam = patch.branchLabel ?? null;
   const statusParam = patch.status ?? null;
-  const scope = scopeUpdateParams(patch.connectedScope);
+  const scope = scopeUpdateParams(resolveScopePatch(patch));
   const localScope = localKnowledgeScopeUpdateParams(patch.localKnowledgeScope);
   const row = db
     .prepare(SQL_UPDATE)

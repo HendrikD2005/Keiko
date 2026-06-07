@@ -6,6 +6,7 @@ import type { SnapZone } from "../windows/connectionUtils";
 import { WIN_TYPES, type WindowType } from "../windows/WindowsRegistry";
 import type { AppWindow, Connection, ConnectingState, SnapPrev, View } from "../windows/types";
 import type { FilesWindowContext, ViewportWorld, WorkspaceApi } from "./useWorkspace.types";
+import type { ChatConnectedScope } from "@/lib/types";
 
 function addPosition(
   vp: ViewportWorld,
@@ -284,6 +285,11 @@ interface ConnectArgs {
   readonly focus: WorkspaceApi["focus"];
   readonly setConns: Dispatch<SetStateAction<Connection[]>>;
   readonly setConnecting: Dispatch<SetStateAction<ConnectingState | null>>;
+  // Epic #532 — invoked when a Files↔Chat relationship edge is created/removed, with the Files
+  // window's resolved absolute root. The composition root (AppShell) binds it to the active chat's
+  // connectedScopes so the relationship gesture actually grounds the chat against the folder.
+  readonly onScopeBind?: ((filesRoot: string) => void) | undefined;
+  readonly onScopeUnbind?: ((filesRoot: string) => void) | undefined;
 }
 
 function isDuplicate(cs: readonly Connection[], a: string, b: string): boolean {
@@ -319,6 +325,8 @@ export function makeConnectActions(args: ConnectArgs): ConnectApi {
     focus,
     setConns,
     setConnecting,
+    onScopeBind,
+    onScopeUnbind,
   } = args;
 
   const cancelConnect: WorkspaceApi["cancelConnect"] = () => {
@@ -345,6 +353,10 @@ export function makeConnectActions(args: ConnectArgs): ConnectApi {
           : [...cs, { id: `${c.from}~${toId}`, a: c.from, b: toId }],
       );
       focus(toId);
+      // Epic #532 — a Files↔Chat edge also binds the folder to the chat's connectedScopes so the
+      // relationship gesture grounds the chat. No-op for any other window pairing.
+      const boundRoot = filesChatBindRoot(from, to);
+      if (boundRoot !== null) onScopeBind?.(boundRoot);
     }
     cancelConnect();
   };
@@ -383,8 +395,18 @@ export function makeConnectActions(args: ConnectArgs): ConnectApi {
     };
   };
 
-  const removeConn: WorkspaceApi["removeConn"] = (id) =>
+  const removeConn: WorkspaceApi["removeConn"] = (id) => {
+    // Epic #532 — if the removed edge was a Files↔Chat binding, unbind that folder from the chat.
+    const conn = connsRef.current.find((c) => c.id === id);
     setConns((cs) => cs.filter((c) => c.id !== id));
+    if (conn === undefined) return;
+    const list = winsRef.current;
+    const a = list.find((w) => w.id === conn.a);
+    const b = list.find((w) => w.id === conn.b);
+    if (a === undefined || b === undefined) return;
+    const boundRoot = filesChatBindRoot(a, b);
+    if (boundRoot !== null) onScopeUnbind?.(boundRoot);
+  };
 
   const connect: WorkspaceApi["connect"] = (a, b) => {
     const list = winsRef.current;
@@ -451,3 +473,82 @@ export function makeConnectActions(args: ConnectArgs): ConnectApi {
 
 // Re-exports for callers that need the lower-level type
 export type { WindowType };
+
+// ─── M3 (#532) pure scope-list helpers (exported for tests) ─────────────────
+
+export const MAX_SCOPES = 16;
+
+/** True when `root` is a non-empty absolute POSIX or Windows path. */
+function isAbsoluteRoot(root: string): boolean {
+  return root.length > 0 && (root.startsWith("/") || /^[A-Za-z]:[/\\]/u.test(root));
+}
+
+/**
+ * Resolves the real absolute root of a Files window.
+ * Returns null when only the "src" sentinel fallback would apply — the spec
+ * says we must NOT bind that fallback as a connectedScope.
+ */
+export function resolvedFilesRoot(w: AppWindow): string | null {
+  if (w.type !== "files") return null;
+  const resolvedRoot = w.cfg["resolvedRoot"];
+  const configuredRoot = w.cfg["root"];
+  const root =
+    typeof resolvedRoot === "string" && resolvedRoot.length > 0
+      ? resolvedRoot
+      : typeof configuredRoot === "string" && configuredRoot.length > 0
+        ? configuredRoot
+        : null;
+  return root !== null && isAbsoluteRoot(root) ? root : null;
+}
+
+/**
+ * For a window pair, returns the Files window's resolved root when exactly one side is a Files
+ * window and the other is a Chat window; otherwise null. Used to detect a Files↔Chat binding edge.
+ */
+export function filesChatBindRoot(a: AppWindow, b: AppWindow): string | null {
+  const files = a.type === "files" ? a : b.type === "files" ? b : null;
+  const chat = a.type === "chat" ? a : b.type === "chat" ? b : null;
+  if (files === null || chat === null) return null;
+  return resolvedFilesRoot(files);
+}
+
+/**
+ * Appends a new source to the current scopes list (de-duped by root, capped at
+ * MAX_SCOPES). Returns null when the root is empty/not absolute (caller should
+ * surface "browse/choose a folder first").
+ */
+export function appendScope(
+  current: readonly ChatConnectedScope[],
+  root: string,
+  now: number,
+): readonly ChatConnectedScope[] | null {
+  if (!isAbsoluteRoot(root)) return null;
+  if (current.some((s) => s.root === root)) return current;
+  const next: ChatConnectedScope = {
+    kind: "workspace-root",
+    relativePaths: [],
+    root,
+    connectedAtMs: now,
+  };
+  const combined = [...current, next];
+  return combined.length > MAX_SCOPES ? combined.slice(-MAX_SCOPES) : combined;
+}
+
+/**
+ * Removes the source with the given root from the scopes list. Returns an
+ * empty array (not null) when the list becomes empty so callers can PATCH null.
+ */
+export function removeScope(
+  current: readonly ChatConnectedScope[],
+  root: string,
+): readonly ChatConnectedScope[] {
+  return current.filter((s) => s.root !== root);
+}
+
+/** Canonical reader: derive effective scopes from Chat fields. */
+export function effectiveScopes(chat: {
+  connectedScopes?: readonly ChatConnectedScope[] | undefined;
+  connectedScope?: ChatConnectedScope | undefined;
+}): readonly ChatConnectedScope[] {
+  return chat.connectedScopes ?? (chat.connectedScope !== undefined ? [chat.connectedScope] : []);
+}

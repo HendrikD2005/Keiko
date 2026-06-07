@@ -5753,6 +5753,14 @@ select.dlg-input {
 /* ============================================================
    Connector UI (Issue #184) — Files window -> chat scope binding
    ============================================================ */
+/* Epic #532 — container for 1+N connected-source pills; wraps to new rows as sources accumulate. */
+.scope-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .scope-pill-wrap {
   display: inline-flex;
   align-items: center;
@@ -5951,6 +5959,27 @@ select.dlg-input {
   font-size: 10px;
   color: var(--fg);
   font-family: var(--font-mono);
+}
+
+/* Partial-coverage notice: warns the user that the answer does not cover the whole connected
+   folder because some files were too large (>2 MB) or a binary/unsupported format. Text uses --fg
+   (16.96:1 on --card-2 in dark, high contrast on the near-white --card-2 in light — WCAG 1.4.3);
+   the warning cue is the --warn left border, which is not subject to text-contrast rules. */
+.grounded-coverage-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--card-2);
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+}
+.grounded-coverage-notice-title {
+  font-weight: 600;
+  color: var(--fg);
 }
 
 /* Issue #187 — context inspection summary on every grounded answer. Counts/enums only;

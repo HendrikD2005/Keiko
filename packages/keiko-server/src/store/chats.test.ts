@@ -175,6 +175,32 @@ describe("updateChat — connectedScope round-trip (#184)", () => {
     });
   });
 
+  it("round-trips an external scope root through SELECT (#532)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const externalRoot = "/Users/someone/Documents/quarterly-reports";
+    const updated = store.updateChat(c.id, {
+      connectedScope: {
+        kind: "workspace-root",
+        relativePaths: [],
+        connectedAtMs: 99,
+        root: externalRoot,
+      },
+    });
+    expect(updated.connectedScope?.root).toBe(externalRoot);
+    const fetched = store.listChats(proj).find((x) => x.id === c.id);
+    // The root must survive the JSON column encode/decode — a connected folder outside the chat's
+    // project is otherwise silently lost and the grounded path falls back to the wrong root.
+    expect(fetched?.connectedScope?.root).toBe(externalRoot);
+  });
+
+  it("leaves connectedScope.root undefined when not provided (#532)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const updated = store.updateChat(c.id, {
+      connectedScope: { kind: "workspace-root", relativePaths: [], connectedAtMs: 1 },
+    });
+    expect(updated.connectedScope?.root).toBeUndefined();
+  });
+
   it("clears connectedScope when patched with null", () => {
     const c = store.createChat(proj, "t", "m");
     store.updateChat(c.id, {
@@ -231,6 +257,156 @@ describe("updateChat — connectedScope round-trip (#184)", () => {
         connectedScope: { kind: "files", relativePaths: ["src/a"], connectedAtMs: 1.5 },
       }),
     ).toThrow(UiStoreError);
+  });
+});
+
+// Epic #532 — multi-source connectedScopes list round-trip through SQLite. A chat may bind N
+// connected folders/files at once; the list is encoded as a JSON ARRAY in connected_scope_paths.
+describe("updateChat — connectedScopes list round-trip (#532)", () => {
+  it("sets two sources with distinct roots and round-trips both (list + back-compat single)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const scopes = [
+      {
+        kind: "directory" as const,
+        relativePaths: ["docs"],
+        connectedAtMs: 10,
+        root: "/srv/alpha",
+      },
+      {
+        kind: "files" as const,
+        relativePaths: ["a.md", "b.md"],
+        connectedAtMs: 11,
+        root: "/srv/beta",
+      },
+    ];
+    const updated = store.updateChat(c.id, { connectedScopes: scopes });
+    expect(updated.connectedScopes).toEqual(scopes);
+    // Back-compat readers see the first source on the single field.
+    expect(updated.connectedScope).toEqual(scopes[0]);
+    const fetched = store.findChatById(c.id);
+    expect(fetched?.connectedScopes).toEqual(scopes);
+    expect(fetched?.connectedScopes?.[0]?.root).toBe("/srv/alpha");
+    expect(fetched?.connectedScopes?.[1]?.root).toBe("/srv/beta");
+    expect(fetched?.connectedScope).toEqual(scopes[0]);
+  });
+
+  it("decodes a legacy single-object row as a 1-element connectedScopes list", () => {
+    const c = store.createChat(proj, "t", "m");
+    // Write via the single-field path (legacy encoding = one object, not an array).
+    store.updateChat(c.id, {
+      connectedScope: { kind: "files", relativePaths: ["src/a"], connectedAtMs: 5 },
+    });
+    const fetched = store.findChatById(c.id);
+    expect(fetched?.connectedScopes).toEqual([
+      { kind: "files", relativePaths: ["src/a"], connectedAtMs: 5 },
+    ]);
+    expect(fetched?.connectedScope).toEqual({
+      kind: "files",
+      relativePaths: ["src/a"],
+      connectedAtMs: 5,
+    });
+  });
+
+  it("clears the list when patched with connectedScopes: null", () => {
+    const c = store.createChat(proj, "t", "m");
+    store.updateChat(c.id, {
+      connectedScopes: [{ kind: "files", relativePaths: ["src/a"], connectedAtMs: 1 }],
+    });
+    const cleared = store.updateChat(c.id, { connectedScopes: null });
+    expect(cleared.connectedScopes ?? []).toHaveLength(0);
+    expect(cleared.connectedScope).toBeUndefined();
+    const fetched = store.findChatById(c.id);
+    expect(fetched?.connectedScopes ?? []).toHaveLength(0);
+    expect(fetched?.connectedScope).toBeUndefined();
+  });
+
+  it("treats a single-element connectedScopes list identically to the legacy single field", () => {
+    const c = store.createChat(proj, "t", "m");
+    const one = { kind: "files" as const, relativePaths: ["src/x"], connectedAtMs: 3 };
+    const viaList = store.updateChat(c.id, { connectedScopes: [one] });
+    expect(viaList.connectedScope).toEqual(one);
+    expect(viaList.connectedScopes).toEqual([one]);
+  });
+
+  it("rejects a list exceeding MAX_CONNECTED_SOURCES (17 entries)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const tooMany = Array.from({ length: 17 }, (_unused, i) => ({
+      kind: "files" as const,
+      relativePaths: [`src/f${String(i)}`],
+      connectedAtMs: 1,
+    }));
+    expect(() => store.updateChat(c.id, { connectedScopes: tooMany })).toThrow(UiStoreError);
+  });
+
+  it("rejects a list whose entry has an invalid (absolute) relative path", () => {
+    const c = store.createChat(proj, "t", "m");
+    expect(() =>
+      store.updateChat(c.id, {
+        connectedScopes: [{ kind: "files", relativePaths: ["/etc/passwd"], connectedAtMs: 1 }],
+      }),
+    ).toThrow(UiStoreError);
+  });
+
+  it("accepts the maximum allowed list size (16 entries)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const max = Array.from({ length: 16 }, (_unused, i) => ({
+      kind: "files" as const,
+      relativePaths: [`src/f${String(i)}`],
+      connectedAtMs: 1,
+    }));
+    const updated = store.updateChat(c.id, { connectedScopes: max });
+    expect(updated.connectedScopes).toHaveLength(16);
+  });
+
+  it("prefers connectedScopes over connectedScope when both are present in a patch", () => {
+    const c = store.createChat(proj, "t", "m");
+    const updated = store.updateChat(c.id, {
+      connectedScope: { kind: "files", relativePaths: ["src/single"], connectedAtMs: 1 },
+      connectedScopes: [{ kind: "files", relativePaths: ["src/list"], connectedAtMs: 2 }],
+    });
+    expect(updated.connectedScopes).toEqual([
+      { kind: "files", relativePaths: ["src/list"], connectedAtMs: 2 },
+    ]);
+    expect(updated.connectedScope).toEqual({
+      kind: "files",
+      relativePaths: ["src/list"],
+      connectedAtMs: 2,
+    });
+  });
+
+  it("drops a scope whose persisted root is not absolute (L2 read-side tamper defense, #532)", () => {
+    const c = store.createChat(proj, "t", "m");
+    // The BFF validates root absoluteness on write; the store write layer does not. A directly
+    // tampered DB row (or a caller that bypassed the BFF) could carry a relative root. The
+    // read/decode layer must treat a non-absolute root as tampering and collapse the whole scope to
+    // undefined rather than ground against an attacker-chosen relative location.
+    const written = store.updateChat(c.id, {
+      connectedScope: {
+        kind: "workspace-root",
+        relativePaths: [],
+        connectedAtMs: 9,
+        root: "relative/evil",
+      },
+    });
+    expect(written.connectedScope).toBeUndefined();
+    expect(written.connectedScopes ?? []).toHaveLength(0);
+    const fetched = store.findChatById(c.id);
+    expect(fetched?.connectedScope).toBeUndefined();
+  });
+
+  it("round-trips a scope whose persisted root IS absolute (L2 allows the valid shape, #532)", () => {
+    const c = store.createChat(proj, "t", "m");
+    const written = store.updateChat(c.id, {
+      connectedScope: {
+        kind: "workspace-root",
+        relativePaths: [],
+        connectedAtMs: 9,
+        root: "/srv/data/reports",
+      },
+    });
+    expect(written.connectedScope?.root).toBe("/srv/data/reports");
+    const fetched = store.findChatById(c.id);
+    expect(fetched?.connectedScope?.root).toBe("/srv/data/reports");
   });
 });
 

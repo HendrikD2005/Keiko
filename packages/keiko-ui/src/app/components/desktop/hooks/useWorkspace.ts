@@ -245,8 +245,10 @@ function useHydrate({ wsRef, setWins, setConns, zc }: UseHydrateArgs): void {
     } catch {
       init = null;
     }
-    if (init === null) init = defaultLayout(r.width, r.height) as unknown as AppWindow[];
-    zc.current = Math.max(1, ...init.map((w) => w.z));
+    // M1 (#532) — no seeded windows on first launch; the empty-state "New window" button
+    // in Workspace.tsx and the FAB (+) are always reachable even when `wins` is [].
+    if (init === null) init = [];
+    zc.current = init.length === 0 ? 1 : Math.max(1, ...init.map((w) => w.z));
     setWins(init);
     try {
       setConns(parsePersistedConnections(window.localStorage.getItem(CONN_LS), init));
@@ -366,7 +368,17 @@ function useConnectionPrune(
   }, [wins, setConns]);
 }
 
-export function useWorkspace(wsRef: RefObject<HTMLElement | null>): UseWorkspaceResult {
+// Epic #532 — optional Files↔Chat scope-binding callbacks. The composition root (AppShell) wires
+// these to the active chat's connectedScopes so a relationship edge grounds the chat against a folder.
+export interface UseWorkspaceOptions {
+  readonly onScopeBind?: ((filesRoot: string) => void) | undefined;
+  readonly onScopeUnbind?: ((filesRoot: string) => void) | undefined;
+}
+
+export function useWorkspace(
+  wsRef: RefObject<HTMLElement | null>,
+  opts: UseWorkspaceOptions = {},
+): UseWorkspaceResult {
   const [wins, setWins] = useState<AppWindow[] | null>(null);
   const [snapPrev, setSnapPrev] = useState<SnapPrev | null>(null);
   const [palOpen, setPalOpen] = useState(false);
@@ -433,6 +445,8 @@ export function useWorkspace(wsRef: RefObject<HTMLElement | null>): UseWorkspace
     focus,
     setConns,
     setConnecting,
+    onScopeBind: opts.onScopeBind,
+    onScopeUnbind: opts.onScopeUnbind,
   });
   cancelConnectRef.current = cancelConnect;
 
