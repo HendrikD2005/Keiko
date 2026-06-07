@@ -275,7 +275,11 @@ const ACTIVITY_HIGH_THROUGHPUT_THRESHOLD = 50;
 const ACTIVITY_SSE_REFRESH_MS = 5_000;
 const ACTIVITY_MAX_RUNS = 64;
 
-const RUN_PROCESSING_EVENT_TYPES = new Set(["tool:call:started", "command:executed", "patch:applied"]);
+const RUN_PROCESSING_EVENT_TYPES = new Set([
+  "tool:call:started",
+  "command:executed",
+  "patch:applied",
+]);
 const RUN_ACTIVE_EVENT_TYPES = new Set(["model:call:started", "workflow:model:call:started"]);
 
 class HandlerError extends Error {
@@ -397,7 +401,11 @@ function scope(req: IncomingMessage, deps: RelationshipHandlerDeps): string {
   return resolved.workspaceId;
 }
 
-function scopeFromEventsRequest(req: IncomingMessage, url: URL, deps: RelationshipHandlerDeps): string {
+function scopeFromEventsRequest(
+  req: IncomingMessage,
+  url: URL,
+  deps: RelationshipHandlerDeps,
+): string {
   const workspaceId = scope(req, deps);
   const requestedWorkspaceId = url.searchParams.get("workspaceId");
   if (requestedWorkspaceId !== null && requestedWorkspaceId !== workspaceId) {
@@ -734,11 +742,17 @@ function mergeActivitySnapshot(
   }
 }
 
-function relevantRunEvents(record: RunRecord, now: number): readonly { readonly ts: number; readonly type: string }[] {
+function relevantRunEvents(
+  record: RunRecord,
+  now: number,
+): readonly { readonly ts: number; readonly type: string }[] {
   const cutoff = now - ACTIVITY_WINDOW_MS;
   return record.sink
     .buffered()
-    .filter((event) => typeof event.ts === "number" && event.ts >= cutoff && typeof event.type === "string")
+    .filter(
+      (event) =>
+        typeof event.ts === "number" && event.ts >= cutoff && typeof event.type === "string",
+    )
     .map((event) => ({ ts: event.ts, type: event.type }));
 }
 
@@ -771,7 +785,7 @@ function runningActivity(
 function activityFromRun(record: RunRecord, now: number): RelationshipActivitySnapshot | undefined {
   const events = relevantRunEvents(record, now);
   const latestTimestamp =
-    events.length > 0 ? events[events.length - 1]?.ts : record.terminatedAt ?? undefined;
+    events.length > 0 ? events[events.length - 1]?.ts : (record.terminatedAt ?? undefined);
   if (latestTimestamp === undefined || latestTimestamp < now - ACTIVITY_WINDOW_MS) {
     return undefined;
   }
@@ -834,14 +848,8 @@ function listRelationshipsForRunId(
 function registryRecords(deps: UiHandlerDeps): readonly RunRecord[] {
   const records = deps.registry.snapshot?.(ACTIVITY_MAX_RUNS) ?? [];
   return [...records].sort((left, right) => {
-    const leftTs =
-      left.sink.buffered().at(-1)?.ts ??
-      left.terminatedAt ??
-      0;
-    const rightTs =
-      right.sink.buffered().at(-1)?.ts ??
-      right.terminatedAt ??
-      0;
+    const leftTs = left.sink.buffered().at(-1)?.ts ?? left.terminatedAt ?? 0;
+    const rightTs = right.sink.buffered().at(-1)?.ts ?? right.terminatedAt ?? 0;
     return rightTs - leftTs;
   });
 }
@@ -854,8 +862,16 @@ function collectActivitySnapshots(
 ): readonly RelationshipActivitySnapshot[] {
   const snapshots = new Map<string, RelationshipActivitySnapshot>();
   const staleOrBlocked = [
-    relationship.store.listRelationships({ workspaceId, lifecycle: "blocked", limit: MAX_LIST_LIMIT }),
-    relationship.store.listRelationships({ workspaceId, lifecycle: "stale", limit: MAX_LIST_LIMIT }),
+    relationship.store.listRelationships({
+      workspaceId,
+      lifecycle: "blocked",
+      limit: MAX_LIST_LIMIT,
+    }),
+    relationship.store.listRelationships({
+      workspaceId,
+      lifecycle: "stale",
+      limit: MAX_LIST_LIMIT,
+    }),
   ];
   for (const result of staleOrBlocked) {
     for (const entry of result.entries) {
@@ -872,7 +888,11 @@ function collectActivitySnapshots(
     if (derived === undefined) {
       continue;
     }
-    for (const relationshipEntry of listRelationshipsForRunId(relationship.store, workspaceId, record.runId)) {
+    for (const relationshipEntry of listRelationshipsForRunId(
+      relationship.store,
+      workspaceId,
+      record.runId,
+    )) {
       mergeActivitySnapshot(snapshots, {
         ...derived,
         id: relationshipEntry.id,
@@ -1985,20 +2005,6 @@ function defaultEtag(updatedAt: number): string {
   return `${hex}-${tail}`;
 }
 
-let auditSequenceCounter = 0;
-function nextAuditSequence(workspaceId: string, db: DatabaseSync): number {
-  // The (workspace_id, sequence) unique index is the structural barrier; we read the
-  // current max and add 1. Test fixtures run in a fresh in-memory DB so this is cheap.
-  const row = db
-    .prepare(
-      "SELECT COALESCE(MAX(sequence), -1) AS m FROM relationship_audit_entries WHERE workspace_id = ?",
-    )
-    .get(workspaceId) as { m?: number } | undefined;
-  const max = typeof row?.m === "number" ? row.m : -1;
-  auditSequenceCounter = max + 1;
-  return auditSequenceCounter;
-}
-
 type TxnFn = (fn: () => void) => void;
 type NowFn = () => number;
 type NewIdFn = () => string;
@@ -2107,13 +2113,11 @@ function portRecordAuditEntry(
   input: AuditEntryInput,
 ): RelationshipAuditEntryRow {
   const eventId = `evt-${randomUUID()}`;
-  const sequence = nextAuditSequence(input.workspaceId, db);
   return insertRelationshipAuditEntry(
     db,
     {
       eventId,
       workspaceId: input.workspaceId,
-      sequence,
       occurredAt: now(),
       kind: input.kind,
       ...(input.relationshipId === undefined ? {} : { relationshipId: input.relationshipId }),

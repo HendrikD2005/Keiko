@@ -199,8 +199,9 @@ function buildFixtureRunResult(
   report: Record<string, unknown>,
   writer: RecordingWriter,
   manifestValid: boolean,
+  mode: EvaluationMode,
 ): FixtureRunResult {
-  const scoring = toScoringInput(report, writer.writeCount(), manifestValid);
+  const scoring = toScoringInput(report, writer.writeCount(), manifestValid, mode);
   return {
     fixtureName: fixture.name,
     workflowKind: fixture.workflowKind,
@@ -250,7 +251,7 @@ async function runFixture(
       finishedAt,
     );
     return {
-      result: buildFixtureRunResult(fixture, report, writer, manifestValid),
+      result: buildFixtureRunResult(fixture, report, writer, manifestValid, options.mode),
       evidenceRef,
     };
   } finally {
@@ -311,7 +312,7 @@ export async function runEvaluationSuite(
     dimensions,
     surfaceParity,
     fixtureResults,
-    summary: summarizeScorecard(fixtureResults, dimensions, surfaceParity),
+    summary: summarizeScorecard(fixtureResults, dimensions, surfaceParity, options.mode),
   };
 }
 
