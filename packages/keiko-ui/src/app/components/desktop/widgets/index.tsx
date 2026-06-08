@@ -78,6 +78,7 @@ registerWindowRender("quality", (_cfg, ctx) => (
       ctx.openWindow("qiRun", { runId });
     }}
     connectedRoot={ctx.linkedRoot}
+    connectedFilePath={ctx.linkedFilePath ?? null}
   />
 ));
 registerWindowRender("qiRun", (cfg) => {
