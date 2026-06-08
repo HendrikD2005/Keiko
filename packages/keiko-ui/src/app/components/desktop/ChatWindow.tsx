@@ -20,6 +20,7 @@ import {
   AttachDropZone,
   AttachmentStrip,
   AttachRejectionAlert,
+  SentDocumentsNote,
 } from "./AttachmentStrip";
 import { isRunSummaryMessage, LaunchWorkflowButton, RunSummaryCard } from "./WorkflowHandoff";
 import { Toggle } from "./widgets/shared/Toggle";
@@ -212,10 +213,6 @@ function ComposerBar({
     <div className="cmp-bar">
       {/* Issue #147: real AttachButton replaces the placeholder "Attach (coming soon)" button */}
       <AttachButton model={selectedModelCapability} onFiles={onAttachFiles} />
-      <button type="button" className="cmp-mode" title="Mode">
-        <Icons.spark size={14} style={{ color: "var(--accent)" }} /> Build
-        <Icons.chevron size={12} />
-      </button>
       <span className="spacer" />
       {/* AC #3: loading state — show a "Loading models…" option while bootstrapping */}
       <label className="cmp-model mono" title={selectTitle}>
@@ -529,7 +526,6 @@ function ChatHero({
   readonly ready: boolean;
 }): ReactNode {
   const { loading, activeProject, setDraft, sendMessage } = session;
-  const folder = activeProject?.name ?? "example-workspace";
   return (
     <form
       className="composer composer-compact"
@@ -549,11 +545,13 @@ function ChatHero({
         }
       />
       <div className="cmp-context">
-        <button type="button" className="chip">
-          <Icons.folder size={14} style={{ color: "var(--accent)" }} />
-          <span className="chip-label">{folder}</span>
-          <Icons.chevron size={12} style={{ color: "var(--fg-faint)" }} />
-        </button>
+        {activeProject !== undefined && (
+          <button type="button" className="chip">
+            <Icons.folder size={14} style={{ color: "var(--accent)" }} />
+            <span className="chip-label">{activeProject.name}</span>
+            <Icons.chevron size={12} style={{ color: "var(--fg-faint)" }} />
+          </button>
+        )}
         <button type="button" className="chip">
           <Icons.cube size={14} style={{ color: "var(--fg-dim)" }} />
           <span className="chip-label">Work locally</span>
@@ -1111,6 +1109,7 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
     replaceChat,
     latestGrounded,
     latestMemory,
+    lastSentDocuments,
     memoryEnabled,
     setMemoryEnabled,
     memoryBudgetTokens,
@@ -1198,6 +1197,8 @@ export function ChatWindow({ mini = false, linkedRoot = null }: ChatWindowProps)
               </div>
             ) : null}
             <GroundedAnswerPanel chat={activeChat} answer={latestGrounded} busy={sending} />
+            {/* Issue #148 — disclose which attached documents contributed extracted context. */}
+            <SentDocumentsNote documents={lastSentDocuments} />
           </div>
         )}
       </div>
