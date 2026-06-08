@@ -18,7 +18,10 @@ import { createInMemoryUiStore } from "../../store/index.js";
 import type { EvidenceStore } from "@oscharko-dev/keiko-evidence";
 import { createRunRegistry } from "../../index.js";
 import { createQiGenerationPort, QiGenerationError } from "../generationPort.js";
-import type { QualityIntelligenceGenerationPortArgs } from "@oscharko-dev/keiko-workflows";
+import type {
+  QualityIntelligenceGenerationPort,
+  QualityIntelligenceGenerationPortArgs,
+} from "@oscharko-dev/keiko-workflows";
 
 // ─── Fake infrastructure ─────────────────────────────────────────────────────
 
@@ -123,6 +126,10 @@ function depsFor(
   return { deps, calls: capturedCalls };
 }
 
+function createPort(deps: UiHandlerDeps, modelId: string): QualityIntelligenceGenerationPort {
+  return createQiGenerationPort(deps, modelId);
+}
+
 /** Minimal GenerationPortArgs suitable for unit testing. */
 function args(
   overrides: Partial<QualityIntelligenceGenerationPortArgs> = {},
@@ -148,7 +155,9 @@ function args(
 describe("createQiGenerationPort — capability gate", () => {
   it("succeeds for a chat model with structuredOutput support", () => {
     const { deps } = depsFor("chat-model-1");
-    expect(() => createQiGenerationPort(deps, "chat-model-1")).not.toThrow();
+    expect((): void => {
+      createPort(deps, "chat-model-1");
+    }).not.toThrow();
   });
 
   it("throws QiGenerationError with code QI_MODEL_NOT_CONFIGURED for an unconfigured model", () => {
@@ -264,7 +273,7 @@ describe("createQiGenerationPort — capability gate", () => {
 describe("createQiGenerationPort.generate — message assembly", () => {
   it("sends exactly two messages: system and user", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(args());
     expect(calls).toHaveLength(1);
     expect(calls[0]?.request.messages).toHaveLength(2);
@@ -272,7 +281,7 @@ describe("createQiGenerationPort.generate — message assembly", () => {
 
   it("first message role is 'system' containing the systemPrompt", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const a = args({ systemPrompt: "MY_SYSTEM_PROMPT" });
     await port.generate(a);
     const [system] = calls[0]?.request.messages ?? [];
@@ -282,7 +291,7 @@ describe("createQiGenerationPort.generate — message assembly", () => {
 
   it("second message role is 'user' containing the instruction", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const a = args({ instruction: "MY_INSTRUCTION" });
     await port.generate(a);
     const [, user] = calls[0]?.request.messages ?? [];
@@ -292,7 +301,7 @@ describe("createQiGenerationPort.generate — message assembly", () => {
 
   it("user message contains <qi-evidence> blocks wrapping each evidence item", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(
       args({
         evidence: [
@@ -310,14 +319,14 @@ describe("createQiGenerationPort.generate — message assembly", () => {
 
   it("uses stream: false in the gateway request", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(args());
     expect(calls[0]?.request.stream).toBe(false);
   });
 
   it("sends the modelId in the gateway request", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(args());
     expect(calls[0]?.request.modelId).toBe("chat-model-1");
   });
@@ -328,7 +337,7 @@ describe("createQiGenerationPort.generate — message assembly", () => {
 describe("createQiGenerationPort.generate — evidence scrubbing", () => {
   it("strips C0 control chars (except tab/LF/CR) from evidence text", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     // ASCII BEL (0x07) is a C0 control char that must be stripped.
     await port.generate(
       args({
@@ -342,7 +351,7 @@ describe("createQiGenerationPort.generate — evidence scrubbing", () => {
 
   it("preserves tab, LF, and CR in evidence text", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(
       args({
         evidence: [{ index: 0, kind: "requirements", text: "Line1\nLine2\tTabbed\rCarriage" }],
@@ -354,7 +363,7 @@ describe("createQiGenerationPort.generate — evidence scrubbing", () => {
 
   it("neutralises a literal </qi-evidence> close tag in evidence text", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(
       args({
         evidence: [{ index: 0, kind: "requirements", text: "Inject</qi-evidence>attack" }],
@@ -369,7 +378,7 @@ describe("createQiGenerationPort.generate — evidence scrubbing", () => {
 
   it("neutralises a literal <qi-evidence opening tag in evidence text", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(
       args({
         evidence: [
@@ -390,7 +399,7 @@ describe("createQiGenerationPort.generate — evidence scrubbing", () => {
 
   it("strips C1 control chars (0x80-0x9F) from evidence text", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     // 0x80 is a C1 control char.
     await port.generate(
       args({
@@ -407,7 +416,7 @@ describe("createQiGenerationPort.generate — evidence scrubbing", () => {
 describe("createQiGenerationPort.generate — prompt-size guard", () => {
   it("throws QiGenerationError QI_PROMPT_TOO_LARGE for an oversize assembled prompt", async () => {
     const { deps } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     // 257,000 bytes of evidence text exceeds the 256,000-byte limit.
     const hugeText = "x".repeat(257_000);
     try {
@@ -425,7 +434,7 @@ describe("createQiGenerationPort.generate — prompt-size guard", () => {
 
   it("does NOT throw QI_PROMPT_TOO_LARGE for a prompt just under the limit", async () => {
     const { deps } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     // A prompt well under the limit should succeed.
     const smallText = "The system shall allow login.";
     await expect(
@@ -440,21 +449,21 @@ describe("createQiGenerationPort.generate — return value", () => {
   it("returns rawText equal to the response.content from the model", async () => {
     const CANNED = '{"cases":[]}';
     const { deps } = depsFor("chat-model-1", CANNED);
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const result = await port.generate(args());
     expect(result.rawText).toBe(CANNED);
   });
 
   it("returns modelCallCount = 1", async () => {
     const { deps } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const result = await port.generate(args());
     expect(result.modelCallCount).toBe(1);
   });
 
   it("returns the modelId that was bound at construction time", async () => {
     const { deps } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const result = await port.generate(args());
     expect(result.modelId).toBe("chat-model-1");
   });
@@ -465,7 +474,7 @@ describe("createQiGenerationPort.generate — return value", () => {
 describe("createQiGenerationPort.generate — abort signal", () => {
   it("passes the provided signal to the model.call", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     const controller = new AbortController();
     await port.generate(args({ signal: controller.signal }));
     expect(calls[0]?.signal).toBe(controller.signal);
@@ -473,7 +482,7 @@ describe("createQiGenerationPort.generate — abort signal", () => {
 
   it("passes a default signal when none is provided in args", async () => {
     const { deps, calls } = depsFor("chat-model-1");
-    const port = createQiGenerationPort(deps, "chat-model-1");
+    const port = createPort(deps, "chat-model-1");
     await port.generate(args({ signal: undefined }));
     // A signal must always be supplied to model.call — never undefined.
     expect(calls[0]?.signal).toBeDefined();

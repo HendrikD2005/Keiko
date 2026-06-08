@@ -25,6 +25,7 @@ import { createInMemoryUiStore } from "../../store/index.js";
 import { executeQiRun, QiGenerationError, QiIngestionError } from "../runExecution.js";
 import type { ExecuteQiRunInput, QiRunAccepted } from "../runExecution.js";
 import type { QualityIntelligenceStartRunRequest } from "@oscharko-dev/keiko-contracts";
+import type { QualityIntelligenceRunSummary } from "@oscharko-dev/keiko-workflows";
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
@@ -180,6 +181,10 @@ function makeInput(
   };
 }
 
+async function runQi(input: ExecuteQiRunInput): Promise<QualityIntelligenceRunSummary> {
+  return executeQiRun(input);
+}
+
 // ─── Test lifecycle ───────────────────────────────────────────────────────────
 
 let evidenceDir: string;
@@ -215,7 +220,7 @@ describe("executeQiRun — happy path", () => {
   });
 
   it("persists a manifest in the evidenceDir qi/ subdirectory", async () => {
-    const summary = await executeQiRun(makeInput(evidenceDir));
+    const summary = await runQi(makeInput(evidenceDir));
     // A terminal run persists its manifest; it must be loadable from the evidence dir afterwards.
     const loaded = loadQualityIntelligenceRun("run-exec-001", { evidenceDir });
     expect(loaded).toBeDefined();
@@ -223,7 +228,7 @@ describe("executeQiRun — happy path", () => {
   });
 
   it("returns a run summary with a runId field", async () => {
-    const summary = await executeQiRun(makeInput(evidenceDir));
+    const summary = await runQi(makeInput(evidenceDir));
     expect(typeof summary.runId).toBe("string");
     expect((summary.runId as string).length).toBeGreaterThan(0);
   });
@@ -364,7 +369,7 @@ describe("executeQiRun — unparseable model output", () => {
   it("returns a summary with status 'failed' when the model returns unparseable JSON", async () => {
     const deps = buildDeps({ evidenceDir, modelPort: fakeUnparseablePort() });
     const controller = new AbortController();
-    const summary = await executeQiRun({
+    const summary = await runQi({
       request: makeRequest(),
       runId: "run-bad-output",
       deps,
@@ -383,7 +388,7 @@ describe("executeQiRun — candidate artifact persistence", () => {
   it("persists a candidate artifact for a succeeded run (even with zero candidates)", async () => {
     const deps = buildDeps({ evidenceDir, modelPort: fakeChatPort(EMPTY_CANDIDATES_JSON) });
     const controller = new AbortController();
-    const summary = await executeQiRun({
+    const summary = await runQi({
       request: makeRequest(),
       runId: "run-candidates",
       deps,

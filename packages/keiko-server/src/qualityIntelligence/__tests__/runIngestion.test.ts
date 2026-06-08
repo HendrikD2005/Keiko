@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { ingestInlineSources, QiIngestionError } from "../runIngestion.js";
-import type { IngestInlineSourcesInput } from "../runIngestion.js";
+import type { IngestInlineSourcesInput, QiIngestionResult } from "../runIngestion.js";
 import type { QualityIntelligenceStartRunRequest } from "@oscharko-dev/keiko-contracts";
 
 // ─── Fixture helpers ─────────────────────────────────────────────────────────
@@ -25,6 +25,10 @@ function reqWith(
 
 function input(sources: QualityIntelligenceStartRunRequest["sources"]): IngestInlineSourcesInput {
   return { request: reqWith(sources), runId: RUN_ID, registeredAt: TS };
+}
+
+function ingest(input: IngestInlineSourcesInput): QiIngestionResult {
+  return ingestInlineSources(input);
 }
 
 function requirementsSource(
@@ -129,7 +133,7 @@ describe("ingestInlineSources — workspace folder (Issue #278)", () => {
       "# Spec\nThe export must produce a CSV file.\nThe import must reject malformed rows.\n",
       "utf8",
     );
-    const result = ingestInlineSources(input([{ kind: "workspace", label: "Specs", path: dir }]));
+    const result = ingest(input([{ kind: "workspace", label: "Specs", path: dir }]));
     expect(result.ingestedAtoms.length).toBeGreaterThan(0);
     expect(result.envelopes[0]?.kind).toBe("repository-context");
     // The excerpt content reaches the model-facing canonical text.
