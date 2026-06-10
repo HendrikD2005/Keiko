@@ -40,6 +40,8 @@ const ADAPTERS: ReadonlyArray<{ id: string; label: string; tms: boolean }> = [
   { id: "quality-center", label: "Quality Center (preview)", tms: true },
 ];
 
+const DOWNLOAD_URL_REVOKE_DELAY_MS = 250;
+
 function base64ToUint8Array(b64: string): Uint8Array {
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
@@ -64,7 +66,11 @@ function triggerDownload(
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Some browser engines cancel a programmatic Blob download when the object URL is revoked in the
+  // same task as the synthetic click. Keep it alive briefly, then release it to avoid leaks.
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, DOWNLOAD_URL_REVOKE_DELAY_MS);
 }
 
 export interface ExportBarProps {
