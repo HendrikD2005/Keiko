@@ -213,6 +213,37 @@ describe("ConnectorGraph — action buttons fire correct fetch calls", () => {
     });
   });
 
+  it("disables indexing for capsules without attached sources", async () => {
+    const id = makeCapsuleId("empty");
+    const capsule = makeCapsule({
+      id,
+      displayName: "Empty Cap",
+      lifecycleState: "draft",
+      sourceCount: 0,
+    });
+    const startIndexingImpl = vi.fn().mockImplementation(() => okAction(id));
+
+    render(
+      <ConnectorGraph
+        fetchCapsulesImpl={fetchWith([capsule])}
+        startIndexingImpl={startIndexingImpl}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Empty Cap")).toBeInTheDocument();
+    });
+
+    const indexBtn = screen.getByRole("button", {
+      name: /attach a source before indexing capsule empty cap/i,
+    });
+    expect(indexBtn).toBeDisabled();
+    expect(indexBtn).toHaveAttribute("title", "Attach a source before indexing this capsule.");
+
+    await userEvent.setup().click(indexBtn);
+    expect(startIndexingImpl).not.toHaveBeenCalled();
+  });
+
   it("shows busy feedback on the triggered row button while the action is in flight (uiux-fix F048, C233)", async () => {
     const id = makeCapsuleId("43");
     const capsule = makeCapsule({ id, displayName: "Slow Cap", lifecycleState: "draft" });
