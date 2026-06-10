@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Keiko",
+  title: "Keiko | Ex experientia disco",
   // uiux-fix F038 C376: aligned with the official README positioning ("a governed agentic
   // workspace for knowledge work") — "developer-assist" misdescribed the product to the
   // non-developer audiences the install surface reaches.
