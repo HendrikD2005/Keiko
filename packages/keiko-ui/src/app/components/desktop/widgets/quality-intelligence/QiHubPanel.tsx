@@ -7,7 +7,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import type { QualityIntelligenceUiRunSummary } from "@oscharko-dev/keiko-contracts";
+import type {
+  QualityIntelligenceInlineSource,
+  QualityIntelligenceUiRunSummary,
+} from "@oscharko-dev/keiko-contracts";
 import { fetchQiRuns } from "@/lib/quality-intelligence-api";
 import { RunLauncher } from "./RunLauncher";
 import {
@@ -21,7 +24,10 @@ import {
 
 export interface QiHubPanelProps {
   /** Opens a Workspace window — wired to the render context so the hub can spawn run cards. */
-  readonly openRun: (runId: string) => void;
+  readonly openRun: (
+    runId: string,
+    recheckableSources?: readonly QualityIntelligenceInlineSource[],
+  ) => void;
   /** Folder bound via a relationship edge to a Files window (Epic #270 Slice 1). */
   readonly connectedRoot?: string | null;
   /** Focused single file in the connected Files window (Epic #709) — preferred over the folder. */
@@ -117,9 +123,9 @@ export function QiHubPanel({
   }, [loadRuns]);
 
   const handleRunCompleted = useCallback(
-    (runId: string): void => {
+    (runId: string, recheckableSources: readonly QualityIntelligenceInlineSource[]): void => {
       void loadRuns();
-      openRun(runId);
+      openRun(runId, recheckableSources);
     },
     [loadRuns, openRun],
   );
