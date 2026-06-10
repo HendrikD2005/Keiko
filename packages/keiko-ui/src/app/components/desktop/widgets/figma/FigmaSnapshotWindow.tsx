@@ -63,11 +63,47 @@ function isValidFigmaLink(raw: string): boolean {
   }
 }
 
+interface SnapshotErrorNotice {
+  readonly title: string;
+  readonly detail: string;
+  readonly status?: string | undefined;
+  readonly remediation?: string | undefined;
+  readonly assertive?: boolean | undefined;
+}
+
+const FIGMA_EXTERNAL_DEPENDENCY_ERRORS: ReadonlySet<string> = new Set([
+  "FIGMA_PROXY_EGRESS_FAILED",
+  "FIGMA_PROXY_UNREACHABLE",
+  "FIGMA_TLS_CA_FAILURE",
+  "FIGMA_UPSTREAM_UNAVAILABLE",
+]);
+
+function formatSnapshotError(err: unknown): SnapshotErrorNotice {
+  if (err instanceof ApiError) {
+    if (FIGMA_EXTERNAL_DEPENDENCY_ERRORS.has(err.code)) {
+      return {
+        title: "Figma snapshot blocked by outbound egress",
+        detail: `${err.code}: ${err.message}`,
+        status: `HTTP ${err.status.toString()}`,
+        remediation:
+          "Check the configured proxy, NO_PROXY rules, and CA bundle, then retry. No snapshot was stored.",
+        assertive: true,
+      };
+    }
+    return {
+      title: "Figma snapshot failed",
+      detail: err.message,
+    };
+  }
+  if (err instanceof Error) {
+    return { title: "Figma snapshot failed", detail: err.message };
+  }
+  return { title: "Figma snapshot failed", detail: "An unexpected error occurred." };
+}
+
 function formatError(err: unknown): string {
-  // ApiError messages (FIGMA_ROUTE_ERROR_MESSAGES) are clean and actionable on their
-  // own — surface them WITHOUT the SCREAMING_SNAKE code prefix (developer jargon).
-  if (err instanceof Error) return err.message;
-  return "An unexpected error occurred.";
+  const notice = formatSnapshotError(err);
+  return notice.status === undefined ? notice.detail : `${notice.detail} (${notice.status})`;
 }
 
 /**
@@ -183,7 +219,7 @@ export function FigmaSnapshotWindow({
   const [boardLink, setBoardLink] = useState("");
   const [buildState, setBuildState] = useState<BuildState>("idle");
   const [summary, setSummary] = useState<FigmaSnapshotSummary | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<SnapshotErrorNotice | null>(null);
   // Explicit read-only-scope acknowledgement (#760) — recorded server-side before the first build.
   const [consentChecked, setConsentChecked] = useState(false);
   // uiux-fix F038 C210: when consent blocks a snapshot (inline pre-check OR the server's 428
@@ -217,7 +253,7 @@ export function FigmaSnapshotWindow({
   const runBuild = useCallback(
     async (link: string, isResnapshot: boolean): Promise<void> => {
       setBuildState("building");
-      setErrorMsg(null);
+      setErrorNotice(null);
       setCodeState("idle");
       setCode(null);
       try {
@@ -232,12 +268,14 @@ export function FigmaSnapshotWindow({
         // uiux-fix F038 C210: the server's 428 message names the policy but not the control —
         // extend it with an instruction that points at the checkbox, and highlight + focus it.
         if (err instanceof ApiError && err.code === "FIGMA_CONSENT_REQUIRED") {
-          setErrorMsg(
-            `${formatError(err)} Tick the acknowledgement checkbox below, then snapshot again.`,
-          );
+          const notice = formatSnapshotError(err);
+          setErrorNotice({
+            ...notice,
+            detail: `${notice.detail} Tick the acknowledgement checkbox below, then snapshot again.`,
+          });
           flagConsentRequired();
         } else {
-          setErrorMsg(formatError(err));
+          setErrorNotice(formatSnapshotError(err));
         }
         setBuildState("error");
       }
@@ -253,7 +291,10 @@ export function FigmaSnapshotWindow({
         // The server enforces the acknowledgement with FIGMA_CONSENT_REQUIRED (HTTP 428)
         // on the first build for a board — fail inline instead of letting the first-run
         // happy path end in a guaranteed server-error roundtrip.
-        setErrorMsg("Tick the read-only acknowledgement checkbox below, then snapshot again.");
+        setErrorNotice({
+          title: "Figma snapshot failed",
+          detail: "Tick the read-only acknowledgement checkbox below, then snapshot again.",
+        });
         setBuildState("error");
         // uiux-fix F038 C210: point at the control, don't just describe it — highlight the
         // checkbox and move focus onto it so the fix is one keypress away.
@@ -298,14 +339,14 @@ export function FigmaSnapshotWindow({
     // Distinct "loading" state — this path reads the locally stored evidence record
     // only and never contacts Figma, so it must not show the "building" copy.
     setBuildState("loading");
-    setErrorMsg(null);
+    setErrorNotice(null);
     loadImpl(snapshotRunId)
       .then((result) => {
         setSummary(result);
         setBuildState("done");
       })
       .catch((err: unknown) => {
-        setErrorMsg(formatError(err));
+        setErrorNotice(formatSnapshotError(err));
         setBuildState("error");
       });
   }, [busy, loadImpl, snapshotRunId]);
@@ -336,7 +377,7 @@ export function FigmaSnapshotWindow({
               setBoardLink(e.target.value);
               // Editing the link invalidates any previous error — clear it so stale
               // and current feedback never contradict each other.
-              if (errorMsg !== null) setErrorMsg(null);
+              if (errorNotice !== null) setErrorNotice(null);
               if (buildState === "error") setBuildState("idle");
               if (consentInvalid) setConsentInvalid(false);
             }}
@@ -377,7 +418,7 @@ export function FigmaSnapshotWindow({
             onChange={(e) => {
               setConsentChecked(e.target.checked);
               // Checking the box answers a consent error — clear stale feedback.
-              if (errorMsg !== null) setErrorMsg(null);
+              if (errorNotice !== null) setErrorNotice(null);
               if (buildState === "error") setBuildState("idle");
               setConsentInvalid(false);
             }}
@@ -422,11 +463,30 @@ export function FigmaSnapshotWindow({
             for review.
           </p>
         )}
+        {buildState === "error" && errorNotice !== null && errorNotice.assertive === true && (
+          <div
+            className="figma-snapshot-error-card"
+            role="alert"
+            aria-labelledby={`${statusId}-error-title`}
+          >
+            <p id={`${statusId}-error-title`} className="figma-snapshot-error-title">
+              {errorNotice.title}
+            </p>
+            <p className="figma-snapshot-error-detail">{errorNotice.detail}</p>
+            {errorNotice.status !== undefined && (
+              <p className="figma-snapshot-error-status">{errorNotice.status}</p>
+            )}
+            {errorNotice.remediation !== undefined && (
+              <p className="figma-snapshot-error-remediation">{errorNotice.remediation}</p>
+            )}
+          </div>
+        )}
         {/* uiux-fix F045 C375: no role="alert" inside this polite atomic live region — the
             region itself announces its content; a nested assertive alert caused double or
-            competing announcements depending on the screen reader. */}
-        {buildState === "error" && errorMsg !== null && (
-          <p className="figma-snapshot-error">{errorMsg}</p>
+            competing announcements depending on the screen reader. External dependency failures
+            intentionally use the structured alert above because they require operator action. */}
+        {buildState === "error" && errorNotice !== null && errorNotice.assertive !== true && (
+          <p className="figma-snapshot-error">{errorNotice.detail}</p>
         )}
       </div>
 
