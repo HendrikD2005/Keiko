@@ -293,6 +293,17 @@ export function CandidateEditForm({
           set("title", v);
         }}
       />
+      {saveError !== null ? (
+        <p className="qi-edit-error" role="alert" aria-live="assertive">
+          {saveError}
+        </p>
+      ) : null}
+      {confirmDiscard ? (
+        <p className="qi-edit-discard-note" role="status">
+          Unsaved changes — press Escape or activate Cancel again to discard them.
+        </p>
+      ) : null}
+      <EditActions onCancel={requestCancel} saving={saving} />
       <TextAreaField
         id={`${id}-preconditions`}
         label="Preconditions (one per line)"
@@ -349,17 +360,6 @@ export function CandidateEditForm({
           set("tags", v);
         }}
       />
-      {saveError !== null ? (
-        <p className="qi-edit-error" role="alert" aria-live="assertive">
-          {saveError}
-        </p>
-      ) : null}
-      {confirmDiscard ? (
-        <p className="qi-edit-discard-note" role="status">
-          Unsaved changes — press Escape or activate Cancel again to discard them.
-        </p>
-      ) : null}
-      <EditActions onCancel={requestCancel} saving={saving} />
     </form>
   );
 }
