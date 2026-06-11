@@ -361,6 +361,23 @@ function buildHandlerDepsOrReport(
   }
 }
 
+function registerLaunchProjectOrReport(
+  cwd: string,
+  handlerDeps: UiHandlerDeps,
+  io: CliIo,
+): number | null {
+  try {
+    handlerDeps.store.createProject(cwd);
+    return null;
+  } catch (error) {
+    if (error instanceof UiStoreError) {
+      io.err(`keiko ui: ${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+}
+
 function ensureStaticRoot(staticRoot: string, io: CliIo): boolean {
   if (existsSync(staticRoot)) {
     return true;
@@ -389,6 +406,24 @@ async function maybeWaitForShutdown(server: Server, deps: UiCliDeps): Promise<vo
   await waitForShutdown(server);
 }
 
+async function startUiServer(
+  staticRoot: string,
+  csp: string,
+  parsed: UiCliArgs,
+  handlerDeps: UiHandlerDeps,
+  io: CliIo,
+  deps: UiCliDeps,
+): Promise<void> {
+  const factory = deps.createServer ?? createUiServer;
+  const server = await factory({ staticRoot, csp, port: parsed.port, handlerDeps });
+  applyServerTimeouts(server);
+  await listen(server, parsed.port);
+  io.out(`Keiko UI listening on http://${UI_HOST}:${String(parsed.port)}\n`);
+  // Block only in the real CLI path (no injected factory). Injected-server tests skip blocking so
+  // they don't hang; the real process must stay alive until signalled.
+  await maybeWaitForShutdown(server, deps);
+}
+
 export async function runUiCli(
   args: readonly string[],
   io: CliIo,
@@ -413,13 +448,8 @@ export async function runUiCli(
     io,
   );
   if (typeof handlerDeps === "number") return handlerDeps;
-  const factory = deps.createServer ?? createUiServer;
-  const server = await factory({ staticRoot, csp, port: parsed.port, handlerDeps });
-  applyServerTimeouts(server);
-  await listen(server, parsed.port);
-  io.out(`Keiko UI listening on http://${UI_HOST}:${String(parsed.port)}\n`);
-  // Block only in the real CLI path (no injected factory). Injected-server tests skip blocking so
-  // they don't hang; the real process must stay alive until signalled.
-  await maybeWaitForShutdown(server, deps);
+  const launchProjectResult = registerLaunchProjectOrReport(cwd, handlerDeps, io);
+  if (launchProjectResult !== null) return launchProjectResult;
+  await startUiServer(staticRoot, csp, parsed, handlerDeps, io, deps);
   return 0;
 }
