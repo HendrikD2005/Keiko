@@ -376,6 +376,14 @@ async function memoryContext(baseUrl, projectPath, chatId, queryText) {
   });
 }
 
+async function listMemories(baseUrl) {
+  return api(baseUrl, "/api/memory?limit=10");
+}
+
+async function fetchReviewQueue(baseUrl) {
+  return api(baseUrl, "/api/memory/review-queue");
+}
+
 async function fetchMemory(baseUrl, memoryId) {
   const res = await globalThis.fetch(`${baseUrl}/api/memory/${encodeURIComponent(memoryId)}`, {
     headers: { Accept: "application/json" },
@@ -409,6 +417,16 @@ async function main() {
     assert(homeHtml.includes("Keiko"), "home page did not contain the Keiko shell marker");
     const memoryHtml = await fetchText(`${ui.baseUrl}/memoriaviva`);
     assert(memoryHtml.includes("MemoriaViva"), "/memoriaviva did not render the MemoriaViva route");
+    const initialMemories = await listMemories(ui.baseUrl);
+    assert(
+      Array.isArray(initialMemories.memories) && initialMemories.memories.length === 0,
+      "fresh packaged install surfaced unexpected memories before any capture workflow",
+    );
+    const initialReviewQueue = await fetchReviewQueue(ui.baseUrl);
+    assert(
+      Array.isArray(initialReviewQueue.memories) && initialReviewQueue.memories.length === 0,
+      "fresh packaged install surfaced unexpected review-queue proposals before any capture workflow",
+    );
 
     const rememberChatId = await createChat(ui.baseUrl, projectA);
     const remember = await sendChat(
