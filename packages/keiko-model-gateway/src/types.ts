@@ -5,9 +5,12 @@
 // `verbatimModuleSyntax` is on, so type-only names use `export type`.
 
 import type {
+  CostClass,
+  GatewayRequest,
   ModelCapability,
   NormalizedResponse,
-  GatewayRequest,
+  ProviderType,
+  ProviderValidationState,
 } from "@oscharko-dev/keiko-contracts";
 import type { GroundingLimits } from "@oscharko-dev/keiko-contracts/bff-wire";
 
@@ -31,15 +34,47 @@ export { CONVERSATION_CAPABILITY_CONTRACT_VERSION } from "@oscharko-dev/keiko-co
 
 // ─── Provider configuration (credential-bearing — STAYS local) ────────────────
 
-export interface ModelProviderConfig {
+interface ProviderConfigBase {
+  readonly modelId: string;
+  readonly timeoutMs: number;
+  readonly maxRetries: number;
+  readonly retryBaseDelayMs: number;
+}
+
+export interface GatewayOpenAiCompatibleProviderConfig extends ProviderConfigBase {
+  readonly providerType?: "gateway-openai-compatible" | undefined;
   readonly modelId: string;
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly apiKeyHeaderName?: string | undefined;
-  readonly timeoutMs: number;
-  readonly maxRetries: number;
-  readonly retryBaseDelayMs: number;
   readonly egress?: OutboundHttpEgressConfig | undefined;
+}
+
+export interface CodexCliCredentialResolverConfig {
+  readonly kind: "codex-cli";
+  readonly command?: string | undefined;
+}
+
+export interface OpenAiCodexLocalSessionProviderConfig extends ProviderConfigBase {
+  readonly providerType: "openai-codex-local-session";
+  readonly credentialResolver: CodexCliCredentialResolverConfig;
+  readonly validationState?: ProviderValidationState | undefined;
+}
+
+export type ModelProviderConfig =
+  | GatewayOpenAiCompatibleProviderConfig
+  | OpenAiCodexLocalSessionProviderConfig;
+
+export function isGatewayOpenAiCompatibleProviderConfig(
+  provider: ModelProviderConfig,
+): provider is GatewayOpenAiCompatibleProviderConfig {
+  return provider.providerType === undefined || provider.providerType === "gateway-openai-compatible";
+}
+
+export function isOpenAiCodexLocalSessionProviderConfig(
+  provider: ModelProviderConfig,
+): provider is OpenAiCodexLocalSessionProviderConfig {
+  return provider.providerType === "openai-codex-local-session";
 }
 
 export interface OutboundHttpEgressConfig {
@@ -59,7 +94,7 @@ export interface GatewayConfig {
   readonly providers: readonly ModelProviderConfig[];
   readonly circuitBreaker: CircuitBreakerConfig;
   readonly capabilities?: readonly ModelCapability[] | undefined;
-  readonly grounding?: Partial<GroundingLimits> | undefined;
+  readonly grounding?: GroundingLimits | undefined;
   readonly egress?: OutboundHttpEgressConfig | undefined;
 }
 
@@ -74,6 +109,19 @@ export type GatewayStreamChunk =
   | { readonly type: "done"; readonly response: NormalizedResponse };
 
 export interface ProviderAdapter {
+  readonly providerType?: ProviderType | undefined;
+  readonly validateConfig?:
+    | ((config: ModelProviderConfig) => void)
+    | undefined;
+  readonly discoverModels?:
+    | ((config: ModelProviderConfig) => Promise<readonly string[]>)
+    | undefined;
+  readonly probeCapabilities?:
+    | ((config: ModelProviderConfig) => Promise<readonly ModelCapability[]>)
+    | undefined;
+  readonly normalizeError?:
+    | ((error: unknown, config: ModelProviderConfig, operation: ProviderRuntimeOperation) => Error)
+    | undefined;
   readonly call: (
     request: GatewayRequest,
     config: ModelProviderConfig,
@@ -84,6 +132,31 @@ export interface ProviderAdapter {
     request: GatewayRequest,
     config: ModelProviderConfig,
   ) => AsyncIterable<GatewayStreamChunk>;
+}
+
+export type ProviderRuntimeOperation =
+  | "validate-config"
+  | "discover-models"
+  | "probe-capabilities"
+  | "call"
+  | "call-stream";
+
+export interface ProviderAdapterFactoryContext {
+  readonly requestId: string;
+  readonly costClass: CostClass;
+  readonly now?: (() => number) | undefined;
+  readonly fetchImpl?: typeof fetch | undefined;
+}
+
+export type ProviderAdapterFactory = (
+  context: ProviderAdapterFactoryContext,
+) => ProviderAdapter;
+
+export interface ProviderRegistry {
+  readonly resolve: (
+    config: ModelProviderConfig,
+    context: ProviderAdapterFactoryContext,
+  ) => ProviderAdapter;
 }
 
 // ─── Clock interface (injectable for deterministic tests — STAYS local) ───────

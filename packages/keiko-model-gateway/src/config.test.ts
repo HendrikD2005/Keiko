@@ -11,9 +11,12 @@ import {
   parseModelCapability,
   toSafeObject,
 } from "./config.js";
+import type { GatewayOpenAiCompatibleProviderConfig } from "./types.js";
+import { isGatewayOpenAiCompatibleProviderConfig } from "./types.js";
 
 interface RawProvider {
   modelId: string;
+  providerType?: "gateway-openai-compatible";
   baseUrl: string;
   apiKey: string;
   timeoutMs: number;
@@ -47,13 +50,53 @@ function rawWithProvider(mutate: (provider: RawProvider) => Record<string, unkno
   };
 }
 
+function gatewayProviderAt(
+  config: ReturnType<typeof parseGatewayConfig>,
+  index = 0,
+): GatewayOpenAiCompatibleProviderConfig {
+  const provider = config.providers[index];
+  expect(provider).toBeDefined();
+  expect(isGatewayOpenAiCompatibleProviderConfig(provider!)).toBe(true);
+  return provider as GatewayOpenAiCompatibleProviderConfig;
+}
+
 describe("parseGatewayConfig", () => {
   it("parses a structurally valid config", () => {
     const config = parseGatewayConfig(validRaw());
+    const provider = gatewayProviderAt(config);
     expect(config.providers).toHaveLength(1);
-    expect(config.providers[0]?.modelId).toBe("example-chat-model");
-    expect(config.providers[0]?.apiKeyHeaderName).toBe("authorization");
+    expect(provider.modelId).toBe("example-chat-model");
+    expect(provider.providerType).toBe("gateway-openai-compatible");
+    expect(provider.apiKeyHeaderName).toBe("authorization");
     expect(config.circuitBreaker.failureThreshold).toBe(5);
+  });
+
+  it("parses a local-session provider without fake baseUrl or apiKey fields", () => {
+    const config = parseGatewayConfig({
+      providers: [
+        {
+          providerType: "openai-codex-local-session",
+          modelId: "gpt-5-codex",
+          credentialResolver: { kind: "codex-cli", command: "codex" },
+          timeoutMs: 30000,
+          maxRetries: 2,
+          retryBaseDelayMs: 500,
+          capability: {
+            kind: "chat",
+            contextWindow: 200_000,
+            maxOutputTokens: 8_192,
+          },
+        },
+      ],
+      circuitBreaker: { failureThreshold: 5, cooldownMs: 30000, halfOpenProbes: 2 },
+    });
+    expect(config.providers[0]).toMatchObject({
+      providerType: "openai-codex-local-session",
+      modelId: "gpt-5-codex",
+      credentialResolver: { kind: "codex-cli", command: "codex" },
+    });
+    expect("baseUrl" in (config.providers[0] ?? {})).toBe(false);
+    expect("apiKey" in (config.providers[0] ?? {})).toBe(false);
   });
 
   it("parses explicit enterprise egress settings and applies them to providers", () => {
@@ -67,13 +110,14 @@ describe("parseGatewayConfig", () => {
       },
     };
     const config = parseGatewayConfig(raw);
+    const provider = gatewayProviderAt(config);
     expect(config.egress).toEqual({
       httpProxy: "http://proxy.local:8080/",
       httpsProxy: "https://secure-proxy.local:8443/",
       noProxy: ["localhost", "127.0.0.1"],
       caBundlePath: "/etc/keiko/enterprise-ca.pem",
     });
-    expect(config.providers[0]?.egress).toEqual(config.egress);
+    expect(provider.egress).toEqual(config.egress);
   });
 
   it("parses enterprise egress settings from the environment", () => {
@@ -83,13 +127,14 @@ describe("parseGatewayConfig", () => {
       KEIKO_NO_PROXY: "localhost,.corp.example",
       KEIKO_CA_BUNDLE_PATH: "/etc/keiko/env-ca.pem",
     });
+    const provider = gatewayProviderAt(config);
     expect(config.egress).toEqual({
       httpProxy: "http://proxy.env.local:8080/",
       httpsProxy: "http://secure-proxy.env.local:8443/",
       noProxy: ["localhost", ".corp.example"],
       caBundlePath: "/etc/keiko/env-ca.pem",
     });
-    expect(config.providers[0]?.egress).toEqual(config.egress);
+    expect(provider.egress).toEqual(config.egress);
   });
 
   it("rejects credential-bearing proxy URLs without echoing the credentials", () => {
@@ -110,7 +155,7 @@ describe("parseGatewayConfig", () => {
   it("accepts a safe custom API key header name", () => {
     const raw = rawWithProvider((p) => ({ ...p, apiKeyHeaderName: "X-Litellm-Key" }));
     const config = parseGatewayConfig(raw);
-    expect(config.providers[0]?.apiKeyHeaderName).toBe("x-litellm-key");
+    expect(gatewayProviderAt(config).apiKeyHeaderName).toBe("x-litellm-key");
   });
 
   it("rejects unsupported API key header names", () => {
@@ -302,28 +347,28 @@ describe("parseGatewayConfig", () => {
     const config = parseGatewayConfig(validRaw(), {
       KEIKO_DEFAULT_API_KEY: "example-env-token-1234567890abcd",
     });
-    expect(config.providers[0]?.apiKey).toBe("example-test-token-1234567890");
+    expect(gatewayProviderAt(config).apiKey).toBe("example-test-token-1234567890");
   });
 
   it("env per-model base url overrides file base url", () => {
     const config = parseGatewayConfig(validRaw(), {
       KEIKO_MODEL_EXAMPLE_CHAT_MODEL_BASE_URL: "https://override.example/v1",
     });
-    expect(config.providers[0]?.baseUrl).toBe("https://override.example/v1");
+    expect(gatewayProviderAt(config).baseUrl).toBe("https://override.example/v1");
   });
 
   it("env per-model api key overrides file api key", () => {
     const config = parseGatewayConfig(validRaw(), {
       KEIKO_MODEL_EXAMPLE_CHAT_MODEL_API_KEY: "example-per-model-token-1234567890",
     });
-    expect(config.providers[0]?.apiKey).toBe("example-per-model-token-1234567890");
+    expect(gatewayProviderAt(config).apiKey).toBe("example-per-model-token-1234567890");
   });
 
   it("env default API key header applies when config omits it", () => {
     const config = parseGatewayConfig(validRaw(), {
       KEIKO_DEFAULT_API_KEY_HEADER_NAME: "X-Api-Key",
     });
-    expect(config.providers[0]?.apiKeyHeaderName).toBe("x-api-key");
+    expect(gatewayProviderAt(config).apiKeyHeaderName).toBe("x-api-key");
   });
 
   it("env per-model API key header overrides file and default headers", () => {
@@ -332,7 +377,7 @@ describe("parseGatewayConfig", () => {
       KEIKO_DEFAULT_API_KEY_HEADER_NAME: "X-Api-Key",
       KEIKO_MODEL_EXAMPLE_CHAT_MODEL_API_KEY_HEADER_NAME: "X-Litellm-Key",
     });
-    expect(config.providers[0]?.apiKeyHeaderName).toBe("x-litellm-key");
+    expect(gatewayProviderAt(config).apiKeyHeaderName).toBe("x-litellm-key");
   });
 
   it("global default fills in a provider with no key from file or per-model env", () => {
@@ -341,7 +386,7 @@ describe("parseGatewayConfig", () => {
       KEIKO_DEFAULT_API_KEY: "example-env-token-1234567890abcd",
       KEIKO_DEFAULT_BASE_URL: "https://default.example/v1",
     });
-    expect(config.providers[0]?.apiKey).toBe("example-env-token-1234567890abcd");
+    expect(gatewayProviderAt(config).apiKey).toBe("example-env-token-1234567890abcd");
   });
 
   describe("baseUrl validation", () => {
@@ -448,7 +493,10 @@ describe("toSafeObject", () => {
     const config = parseGatewayConfig(validRaw());
     const safe = toSafeObject(config);
     expect(safe.providers[0]?.modelId).toBe("example-chat-model");
-    expect(safe.providers[0]?.credentialHeaderName).toBe("authorization");
+    expect(safe.providers[0]).toMatchObject({
+      providerType: "gateway-openai-compatible",
+      credentialHeaderName: "authorization",
+    });
     expect(safe.providers[0]?.timeoutMs).toBe(30000);
   });
 
@@ -473,6 +521,29 @@ describe("toSafeObject", () => {
     });
     expect(JSON.stringify(safe)).not.toContain("example-test-token-1234567890");
     expect(JSON.stringify(safe)).not.toContain("https://host.example/v1");
+  });
+
+  it("redacts local-session credential-resolver details from the safe object", () => {
+    const config = parseGatewayConfig({
+      providers: [
+        {
+          providerType: "openai-codex-local-session",
+          modelId: "gpt-5-codex",
+          credentialResolver: { kind: "codex-cli", command: "/opt/bin/codex" },
+          timeoutMs: 30000,
+          maxRetries: 2,
+          retryBaseDelayMs: 500,
+        },
+      ],
+      circuitBreaker: { failureThreshold: 5, cooldownMs: 30000, halfOpenProbes: 2 },
+    });
+    const safe = toSafeObject(config);
+    expect(safe.providers[0]).toMatchObject({
+      providerType: "openai-codex-local-session",
+      modelId: "gpt-5-codex",
+    });
+    expect(JSON.stringify(safe)).not.toContain("/opt/bin/codex");
+    expect(JSON.stringify(safe)).not.toContain("credentialResolver");
   });
 });
 
@@ -508,7 +579,7 @@ describe("loadConfigFromFile", () => {
     const config = loadConfigFromFile(path, {
       KEIKO_MODEL_EXAMPLE_CHAT_MODEL_API_KEY: "example-file-load-token-1234567890",
     });
-    expect(config.providers[0]?.apiKey).toBe("example-file-load-token-1234567890");
+    expect(gatewayProviderAt(config).apiKey).toBe("example-file-load-token-1234567890");
   });
 });
 
