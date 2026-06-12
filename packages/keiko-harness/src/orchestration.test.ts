@@ -18,7 +18,8 @@ function makeDeps(model: ModelPort, hooks?: OrchestrationDeps["hooks"]): Harness
   return {
     model,
     tools: {
-      execute: async (request) => ({ toolCallId: request.toolCallId, output: "tool", durationMs: 0 }),
+      execute: (request) =>
+        Promise.resolve({ toolCallId: request.toolCallId, output: "tool", durationMs: 0 }),
       listTools: () => [],
     },
     sink: new MemoryEventSink(),
@@ -51,10 +52,10 @@ describe("createOrchestrationSession", () => {
   it("runs dependent children in order", async () => {
     const sequence: string[] = [];
     const hooks = {
-      beforeDispatch: (next: OrchestrationChildRequest) => {
+      beforeDispatch: (next: OrchestrationChildRequest): void => {
         sequence.push(`start:${next.plan.childId}`);
       },
-      afterCompletion: (_next: OrchestrationChildRequest, result: { childId: string }) => {
+      afterCompletion: (_next: OrchestrationChildRequest, result: { childId: string }): void => {
         sequence.push(`done:${result.childId}`);
       },
     };
@@ -85,7 +86,7 @@ describe("createOrchestrationSession", () => {
   it("dispatches independent parallel-eligible children together in parallel mode", async () => {
     const activeSnapshots: string[][] = [];
     const hooks = {
-      beforeDispatch: (_next: OrchestrationChildRequest, active: readonly string[]) => {
+      beforeDispatch: (_next: OrchestrationChildRequest, active: readonly string[]): void => {
         activeSnapshots.push([...active]);
       },
     };
@@ -114,7 +115,9 @@ describe("createOrchestrationSession", () => {
         new Promise((_, reject) => {
           signal.addEventListener(
             "abort",
-            () => reject(new Error("aborted")),
+            () => {
+              reject(new Error("aborted"));
+            },
             { once: true },
           );
         }),
@@ -174,10 +177,10 @@ describe("createOrchestrationSession", () => {
   it("serializes same-file write claims before dispatching a second writer", async () => {
     const sequence: string[] = [];
     const hooks = {
-      beforeDispatch: (next: OrchestrationChildRequest) => {
+      beforeDispatch: (next: OrchestrationChildRequest): void => {
         sequence.push(`start:${next.plan.childId}`);
       },
-      afterCompletion: (_next: OrchestrationChildRequest, result: { childId: string }) => {
+      afterCompletion: (_next: OrchestrationChildRequest, result: { childId: string }): void => {
         sequence.push(`done:${result.childId}`);
       },
     };

@@ -16,7 +16,6 @@ import {
   HARNESS_VERSION,
   type AgentConfig,
   type OrchestrationChildRequest,
-  type OrchestrationChildResult,
   type OrchestrationConfig,
   type OrchestrationSchedulerHooks,
   type OrchestrationSessionResult,
@@ -534,16 +533,32 @@ function toResourceClaims(
   }));
 }
 
-function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: string): Dispatched {
-  if (ctx.request.kind !== "orchestration") {
-    throw new Error("dispatchOrchestration requires an orchestration request");
-  }
-  const fingerprint = workflowFingerprint(ctx.request);
-  const root = workspaceRoot(ctx.request);
-  const projection = orchestrationProjection(ctx.request.orchestration);
-  ctx.orchestration = projection;
-  const hooks: OrchestrationSchedulerHooks = {
-    afterDispatch: (child, session) => {
+function projectResourceConflicts(
+  conflicts:
+    | readonly {
+        readonly conflictingChildId: string;
+        readonly claim: { readonly resourceId: string; readonly kind: "file" | "patch" | "tool" };
+        readonly outcome: "serialize" | "block" | "escalate";
+      }[]
+    | undefined,
+): OrchestrationChildProjection["resourceConflicts"] {
+  return conflicts?.map((conflict) => ({
+    conflictingChildId: conflict.conflictingChildId,
+    resourceId: conflict.claim.resourceId,
+    resourceKind: conflict.claim.kind,
+    outcome: conflict.outcome,
+  }));
+}
+
+// eslint-disable-next-line max-lines-per-function -- hook wiring mirrors the SSE surface and projection updates in one place.
+function buildOrchestrationHooks(
+  projection: OrchestrationProjection,
+  sink: QueueEventSink,
+  runId: string,
+  fingerprint: string,
+): OrchestrationSchedulerHooks {
+  return {
+    afterDispatch: (child, session): void => {
       const current = childProjection(projection, child.plan.childId);
       current.runId = session.runId;
       current.state = "running";
@@ -557,19 +572,12 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
         dependsOn: child.plan.dependsOn,
       });
     },
-    afterCompletion: (child, result) => {
+    afterCompletion: (child, result): void => {
       const current = childProjection(projection, child.plan.childId);
       current.runId = result.run?.runId ?? current.runId;
       current.state = result.state;
       current.reason = result.reason;
-      if (result.conflicts !== undefined) {
-        current.resourceConflicts = result.conflicts.map((conflict) => ({
-          conflictingChildId: conflict.conflictingChildId,
-          resourceId: conflict.claim.resourceId,
-          resourceKind: conflict.claim.kind,
-          outcome: conflict.outcome,
-        }));
-      }
+      current.resourceConflicts = projectResourceConflicts(result.conflicts);
       emitOrchestrationEvent(sink, runId, fingerprint, {
         type: "orchestration:child:settled",
         childId: child.plan.childId,
@@ -578,16 +586,11 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
         reason: result.reason,
       });
     },
-    onBlocked: (child, conflicts) => {
+    onBlocked: (child, conflicts): void => {
       const current = childProjection(projection, child.plan.childId);
       current.state = "blocked";
       current.reason = conflicts.map((conflict) => conflict.reason).join("; ");
-      current.resourceConflicts = conflicts.map((conflict) => ({
-        conflictingChildId: conflict.conflictingChildId,
-        resourceId: conflict.claim.resourceId,
-        resourceKind: conflict.claim.kind,
-        outcome: conflict.outcome,
-      }));
+      current.resourceConflicts = projectResourceConflicts(conflicts);
       projection.state = "conflicted";
       for (const conflict of conflicts) {
         emitOrchestrationEvent(sink, runId, fingerprint, {
@@ -601,12 +604,13 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
       }
     },
   };
-  emitOrchestrationEvent(sink, runId, fingerprint, {
-    type: "orchestration:run:started",
-    executionMode: ctx.request.orchestration.executionMode,
-    childCount: ctx.request.orchestration.children.length,
-  });
-  const children: OrchestrationChildRequest[] = ctx.request.orchestration.children.map((child) => ({
+}
+
+function buildOrchestrationChildren(
+  root: string,
+  orchestration: OrchestrationRequestBody,
+): readonly OrchestrationChildRequest[] {
+  return orchestration.children.map((child) => ({
     plan: {
       childId: child.childId,
       title: child.title,
@@ -618,20 +622,75 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
     task: toTaskInput(root, child),
     ...(child.resourceClaims === undefined ? {} : { resourceClaims: toResourceClaims(child.resourceClaims) }),
   }));
-  const config: OrchestrationConfig = {
-    model: ctx.request.modelId,
+}
+
+function buildOrchestrationConfig(
+  request: Extract<RunRequest, { readonly kind: "orchestration" }>,
+  root: string,
+): OrchestrationConfig {
+  return {
+    model: request.modelId,
     workingDirectory: root,
     dryRun: true,
-    ...(ctx.request.orchestration.childLimits === undefined
+    ...(request.orchestration.childLimits === undefined
       ? {}
-      : { childLimits: ctx.request.orchestration.childLimits }),
-    ...(ctx.request.orchestration.limits === undefined
+      : { childLimits: request.orchestration.childLimits }),
+    ...(request.orchestration.limits === undefined
       ? {}
-      : { limits: ctx.request.orchestration.limits }),
-    ...(ctx.request.orchestration.settlementPolicy === undefined
+      : { limits: request.orchestration.limits }),
+    ...(request.orchestration.settlementPolicy === undefined
       ? {}
-      : { settlementPolicy: ctx.request.orchestration.settlementPolicy }),
+      : { settlementPolicy: request.orchestration.settlementPolicy }),
   };
+}
+
+function finalizeOrchestrationProjection(
+  projection: OrchestrationProjection,
+  orchestrationResult: OrchestrationSessionResult,
+): void {
+  projection.state = orchestrationResult.state;
+  projection.settlement = orchestrationResult.settlement;
+  for (const childResult of Object.values(orchestrationResult.children)) {
+    const current = childProjection(projection, childResult.childId);
+    current.runId = childResult.run?.runId ?? current.runId;
+    current.state = childResult.state;
+    current.reason = childResult.reason;
+  }
+}
+
+function cancelOrchestrationSession(
+  projection: OrchestrationProjection,
+  sink: QueueEventSink,
+  session: { readonly cancel: (reason?: string) => void },
+  runId: string,
+  fingerprint: string,
+  reason?: string,
+): void {
+  projection.state = "cancelling";
+  emitOrchestrationEvent(sink, runId, fingerprint, {
+    type: "orchestration:run:cancelling",
+    reason: reason ?? "cancelled via API",
+  });
+  session.cancel(reason);
+}
+
+// eslint-disable-next-line max-lines-per-function -- route-level orchestration startup keeps request → hooks → session wiring contiguous.
+function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: string): Dispatched {
+  if (ctx.request.kind !== "orchestration") {
+    throw new Error("dispatchOrchestration requires an orchestration request");
+  }
+  const fingerprint = workflowFingerprint(ctx.request);
+  const root = workspaceRoot(ctx.request);
+  const projection = orchestrationProjection(ctx.request.orchestration);
+  ctx.orchestration = projection;
+  const hooks = buildOrchestrationHooks(projection, sink, runId, fingerprint);
+  emitOrchestrationEvent(sink, runId, fingerprint, {
+    type: "orchestration:run:started",
+    executionMode: ctx.request.orchestration.executionMode,
+    childCount: ctx.request.orchestration.children.length,
+  });
+  const children = buildOrchestrationChildren(root, ctx.request.orchestration);
+  const config = buildOrchestrationConfig(ctx.request, root);
   const session = createOrchestrationSession(
     {
       schemaVersion: "1",
@@ -653,16 +712,9 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
       orchestrationResult.state === "completed"
         ? "completed"
         : orchestrationResult.state === "cancelled"
-          ? "cancelled"
+        ? "cancelled"
           : "failed";
-    projection.state = orchestrationResult.state;
-    projection.settlement = orchestrationResult.settlement;
-    for (const childResult of Object.values(orchestrationResult.children)) {
-      const current = childProjection(projection, childResult.childId);
-      current.runId = childResult.run?.runId ?? current.runId;
-      current.state = childResult.state;
-      current.reason = childResult.reason;
-    }
+    finalizeOrchestrationProjection(projection, orchestrationResult);
     emitOrchestrationEvent(sink, runId, fingerprint, {
       type: "orchestration:settlement",
       state: orchestrationResult.state,
@@ -678,12 +730,7 @@ function dispatchOrchestration(ctx: EngineContext, sink: QueueEventSink, runId: 
   return {
     result,
     cancel: (reason?: string): void => {
-      projection.state = "cancelling";
-      emitOrchestrationEvent(sink, runId, fingerprint, {
-        type: "orchestration:run:cancelling",
-        reason: reason ?? "cancelled via API",
-      });
-      session.cancel(reason);
+      cancelOrchestrationSession(projection, sink, session, runId, fingerprint, reason);
     },
   };
 }

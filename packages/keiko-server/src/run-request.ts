@@ -70,6 +70,12 @@ export interface RunRequestError {
   readonly message: string;
 }
 
+type RawOrchestrationBody = Record<string, unknown> & { readonly children: readonly unknown[] };
+
+function isRunRequestError(value: unknown): value is RunRequestError {
+  return isRecord(value) && value.code === "BAD_REQUEST" && typeof value.message === "string";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -180,44 +186,50 @@ function validateVerifyInput(input: Record<string, unknown>): RunRequestError | 
   return validateStringArray(input.targetFiles, "verify targetFiles");
 }
 
-function validateHarnessTaskInput(
-  taskType: TaskType,
+function validateVerifyTaskInput(
   input: Record<string, unknown>,
-  allowWorkspaceRootDefault = false,
+  allowWorkspaceRootDefault: boolean,
 ): RunRequestError | null {
-  if (taskType === "verify") {
-    if (!allowWorkspaceRootDefault) {
-      const workspaceRootError = validateWorkspaceRoot(input);
-      if (workspaceRootError !== null) {
-        return workspaceRootError;
-      }
-    } else if (input.workspaceRoot !== undefined) {
-      const workspaceRootError = validateWorkspaceRoot(input);
-      if (workspaceRootError !== null) {
-        return workspaceRootError;
-      }
+  if (!allowWorkspaceRootDefault || input.workspaceRoot !== undefined) {
+    const workspaceRootError = validateWorkspaceRoot(input);
+    if (workspaceRootError !== null) {
+      return workspaceRootError;
     }
-    return validateVerifyInput(input);
   }
-  if (taskType === "explain-plan") {
-    return validateExplainPlanInput(input);
-  }
-  if (taskType === "generate-unit-tests") {
-    return (
-      validateStringField(input, "filePath", "generate-unit-tests filePath") ??
-      validateOptionalStringField(
-        input,
-        "targetFunction",
-        "generate-unit-tests targetFunction",
-      ) ??
-      validateOptionalStringField(input, "context", "generate-unit-tests context")
-    );
-  }
+  return validateVerifyInput(input);
+}
+
+function validateGenerateUnitTestsTaskInput(input: Record<string, unknown>): RunRequestError | null {
+  return (
+    validateStringField(input, "filePath", "generate-unit-tests filePath") ??
+    validateOptionalStringField(input, "targetFunction", "generate-unit-tests targetFunction") ??
+    validateOptionalStringField(input, "context", "generate-unit-tests context")
+  );
+}
+
+function validateInvestigateBugTaskInput(input: Record<string, unknown>): RunRequestError | null {
   return (
     validateStringField(input, "description", "investigate-bug description") ??
     validateStringArray(input.filePaths, "investigate-bug filePaths") ??
     validateOptionalStringField(input, "context", "investigate-bug context")
   );
+}
+
+function validateHarnessTaskInput(
+  taskType: TaskType,
+  input: Record<string, unknown>,
+  allowWorkspaceRootDefault = false,
+): RunRequestError | null {
+  switch (taskType) {
+    case "verify":
+      return validateVerifyTaskInput(input, allowWorkspaceRootDefault);
+    case "explain-plan":
+      return validateExplainPlanInput(input);
+    case "generate-unit-tests":
+      return validateGenerateUnitTestsTaskInput(input);
+    case "investigate-bug":
+      return validateInvestigateBugTaskInput(input);
+  }
 }
 
 function validateExplainPlanInput(input: Record<string, unknown>): RunRequestError | null {
@@ -377,64 +389,84 @@ function validateResourceClaims(value: unknown): RunRequestError | null {
   return null;
 }
 
-function validateOrchestration(body: Record<string, unknown>): OrchestrationRequestBody | RunRequestError {
+function validateExecutionMode(
+  value: unknown,
+): OrchestrationExecutionMode | RunRequestError {
+  if (!ORCHESTRATION_EXECUTION_MODES.includes(value as OrchestrationExecutionMode)) {
+    return { code: "BAD_REQUEST", message: "orchestration executionMode is invalid." };
+  }
+  return value as OrchestrationExecutionMode;
+}
+
+function validateOrchestrationShape(
+  body: Record<string, unknown>,
+): RawOrchestrationBody | RunRequestError {
   const orchestration = body.orchestration;
   if (!isRecord(orchestration)) {
     return { code: "BAD_REQUEST", message: "orchestration must be an object." };
   }
-  if (!ORCHESTRATION_EXECUTION_MODES.includes(orchestration.executionMode as OrchestrationExecutionMode)) {
-    return { code: "BAD_REQUEST", message: "orchestration executionMode is invalid." };
-  }
   if (!Array.isArray(orchestration.children) || orchestration.children.length === 0) {
     return { code: "BAD_REQUEST", message: "orchestration children must be a non-empty array." };
   }
-  const seen = new Set<string>();
-  const children: OrchestrationChildRequestBody[] = [];
-  for (const child of orchestration.children) {
-    if (!isRecord(child)) {
-      return { code: "BAD_REQUEST", message: "orchestration children must contain objects." };
-    }
-    if (typeof child.childId !== "string" || child.childId.length === 0) {
-      return { code: "BAD_REQUEST", message: "orchestration childId is required." };
-    }
-    if (seen.has(child.childId)) {
-      return { code: "BAD_REQUEST", message: `duplicate orchestration childId: ${child.childId}` };
-    }
-    seen.add(child.childId);
-    if (typeof child.title !== "string" || child.title.length === 0) {
-      return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} title is required.` };
-    }
-    if (!ORCHESTRATION_CHILD_ROLES.includes(child.role as OrchestrationChildRole)) {
-      return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} role is invalid.` };
-    }
-    if (!isTaskType(child.taskType)) {
-      return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} taskType is invalid.` };
-    }
-    if (!isRecord(child.input)) {
-      return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} input must be an object.` };
-    }
-    const inputError = validateHarnessTaskInput(child.taskType, child.input, true);
-    if (inputError !== null) {
-      return inputError;
-    }
-    const dependsOnError = validateStringArray(child.dependsOn, `orchestration child ${child.childId} dependsOn`);
-    if (dependsOnError !== null) {
-      return dependsOnError;
-    }
-    const claimsError = validateResourceClaims(child.resourceClaims);
-    if (claimsError !== null) {
-      return claimsError;
-    }
-    children.push({
-      childId: child.childId,
-      title: child.title,
-      role: child.role as OrchestrationChildRole,
-      taskType: child.taskType,
-      input: child.input,
-      dependsOn: (child.dependsOn as readonly string[] | undefined) ?? [],
-      ...(Array.isArray(child.resourceClaims) ? { resourceClaims: child.resourceClaims as OrchestrationChildRequestBody["resourceClaims"] } : {}),
-    });
+  return orchestration as RawOrchestrationBody;
+}
+
+// eslint-disable-next-line complexity -- each child is validated field-by-field before it crosses the run-request boundary.
+function parseOrchestrationChild(
+  child: unknown,
+  seen: Set<string>,
+): OrchestrationChildRequestBody | RunRequestError {
+  if (!isRecord(child)) {
+    return { code: "BAD_REQUEST", message: "orchestration children must contain objects." };
   }
+  if (typeof child.childId !== "string" || child.childId.length === 0) {
+    return { code: "BAD_REQUEST", message: "orchestration childId is required." };
+  }
+  if (seen.has(child.childId)) {
+    return { code: "BAD_REQUEST", message: `duplicate orchestration childId: ${child.childId}` };
+  }
+  seen.add(child.childId);
+  if (typeof child.title !== "string" || child.title.length === 0) {
+    return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} title is required.` };
+  }
+  if (!ORCHESTRATION_CHILD_ROLES.includes(child.role as OrchestrationChildRole)) {
+    return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} role is invalid.` };
+  }
+  if (!isTaskType(child.taskType)) {
+    return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} taskType is invalid.` };
+  }
+  if (!isRecord(child.input)) {
+    return { code: "BAD_REQUEST", message: `orchestration child ${child.childId} input must be an object.` };
+  }
+  const inputError = validateHarnessTaskInput(child.taskType, child.input, true);
+  if (inputError !== null) {
+    return inputError;
+  }
+  const dependsOnError = validateStringArray(child.dependsOn, `orchestration child ${child.childId} dependsOn`);
+  if (dependsOnError !== null) {
+    return dependsOnError;
+  }
+  const claimsError = validateResourceClaims(child.resourceClaims);
+  if (claimsError !== null) {
+    return claimsError;
+  }
+  return {
+    childId: child.childId,
+    title: child.title,
+    role: child.role as OrchestrationChildRole,
+    taskType: child.taskType,
+    input: child.input,
+    dependsOn: (child.dependsOn as readonly string[] | undefined) ?? [],
+    ...(Array.isArray(child.resourceClaims)
+      ? { resourceClaims: child.resourceClaims as OrchestrationChildRequestBody["resourceClaims"] }
+      : {}),
+  };
+}
+
+function validateChildDependencies(
+  children: readonly OrchestrationChildRequestBody[],
+  seen: ReadonlySet<string>,
+): RunRequestError | null {
   for (const child of children) {
     for (const dependency of child.dependsOn) {
       if (!seen.has(dependency)) {
@@ -445,9 +477,14 @@ function validateOrchestration(body: Record<string, unknown>): OrchestrationRequ
       }
     }
   }
+  return null;
+}
+
+function orchestrationOptions(orchestration: RawOrchestrationBody): Pick<
+  OrchestrationRequestBody,
+  "limits" | "childLimits" | "settlementPolicy"
+> {
   return {
-    executionMode: orchestration.executionMode as OrchestrationExecutionMode,
-    children,
     ...(isRecord(orchestration.limits) ? { limits: orchestration.limits } : {}),
     ...(isRecord(orchestration.childLimits) ? { childLimits: orchestration.childLimits } : {}),
     ...(isRecord(orchestration.settlementPolicy)
@@ -456,8 +493,36 @@ function validateOrchestration(body: Record<string, unknown>): OrchestrationRequ
   };
 }
 
-// Parses the raw JSON text into a validated RunRequest, or a typed BAD_REQUEST error.
-export function parseRunRequest(raw: string): RunRequest | RunRequestError {
+function validateOrchestration(body: Record<string, unknown>): OrchestrationRequestBody | RunRequestError {
+  const orchestration = validateOrchestrationShape(body);
+  if (isRunRequestError(orchestration)) {
+    return orchestration;
+  }
+  const executionMode = validateExecutionMode(orchestration.executionMode);
+  if (isRunRequestError(executionMode)) {
+    return executionMode;
+  }
+  const seen = new Set<string>();
+  const children: OrchestrationChildRequestBody[] = [];
+  for (const child of orchestration.children) {
+    const parsedChild = parseOrchestrationChild(child, seen);
+    if (isRunRequestError(parsedChild)) {
+      return parsedChild;
+    }
+    children.push(parsedChild);
+  }
+  const dependencyError = validateChildDependencies(children, seen);
+  if (dependencyError !== null) {
+    return dependencyError;
+  }
+  return {
+    executionMode,
+    children,
+    ...orchestrationOptions(orchestration),
+  };
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> | RunRequestError {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -467,26 +532,56 @@ export function parseRunRequest(raw: string): RunRequest | RunRequestError {
   if (!isRecord(parsed)) {
     return { code: "BAD_REQUEST", message: "Request body must be a JSON object." };
   }
+  return parsed;
+}
+
+function validateModelId(body: Record<string, unknown>): string | RunRequestError {
+  if (typeof body.modelId !== "string" || body.modelId.length === 0) {
+    return { code: "BAD_REQUEST", message: "A non-empty modelId is required." };
+  }
+  return body.modelId;
+}
+
+function validateRunInputBody(
+  body: Record<string, unknown>,
+  kind: RunKind,
+): Record<string, unknown> | RunRequestError {
+  if (!isRecord(body.input)) {
+    return { code: "BAD_REQUEST", message: "An input object is required." };
+  }
+  const inputError = validateRunInput(kind, body.input);
+  if (inputError !== null) {
+    return inputError;
+  }
+  return body.input;
+}
+
+function optionalLimits(body: Record<string, unknown>): Record<string, unknown> | undefined {
+  return isRecord(body.limits) ? body.limits : undefined;
+}
+
+// Parses the raw JSON text into a validated RunRequest, or a typed BAD_REQUEST error.
+export function parseRunRequest(raw: string): RunRequest | RunRequestError {
+  const parsed = parseJsonObject(raw);
+  if (isRunRequestError(parsed)) {
+    return parsed;
+  }
   const kind = resolveKind(parsed);
   if (typeof kind !== "string") {
     return kind;
   }
-  const modelId = parsed.modelId;
-  if (typeof modelId !== "string" || modelId.length === 0) {
-    return { code: "BAD_REQUEST", message: "A non-empty modelId is required." };
+  const modelId = validateModelId(parsed);
+  if (typeof modelId !== "string") {
+    return modelId;
   }
-  const input = parsed.input;
-  if (!isRecord(input)) {
-    return { code: "BAD_REQUEST", message: "An input object is required." };
+  const input = validateRunInputBody(parsed, kind);
+  if (isRunRequestError(input)) {
+    return input;
   }
-  const inputError = validateRunInput(kind, input);
-  if (inputError !== null) {
-    return inputError;
-  }
-  const limits = parsed.limits;
+  const limits = optionalLimits(parsed);
   if (kind === "orchestration") {
     const orchestration = validateOrchestration(parsed);
-    if ("code" in orchestration) {
+    if (isRunRequestError(orchestration)) {
       return orchestration;
     }
     return {
@@ -494,7 +589,7 @@ export function parseRunRequest(raw: string): RunRequest | RunRequestError {
       modelId,
       apply: false,
       input,
-      ...(isRecord(limits) ? { limits } : { limits: undefined }),
+      limits,
       orchestration,
     };
   }
@@ -507,6 +602,6 @@ export function parseRunRequest(raw: string): RunRequest | RunRequestError {
     // would bypass the explicit review→apply step, so the body flag is deliberately ignored here.
     apply: false,
     input,
-    ...(isRecord(limits) ? { limits } : { limits: undefined }),
+    limits,
   };
 }

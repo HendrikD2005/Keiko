@@ -1,4 +1,5 @@
 import type { Clock } from "@oscharko-dev/keiko-model-gateway";
+import { systemClock } from "@oscharko-dev/keiko-model-gateway/internal/resilience";
 import type {
   OrchestrationAuthorityBoundary,
   OrchestrationChildPlan,
@@ -7,8 +8,6 @@ import type {
   OrchestrationExecutionMode,
   OrchestrationPlan,
   OrchestrationSettlementDecision,
-  OrchestrationSettlementReason,
-  OrchestrationSettlementStrategy,
   OrchestrationState,
   OrchestrationStateTransition,
   HarnessLimits,
@@ -214,7 +213,6 @@ export const DEFAULT_SETTLEMENT_POLICY: SettlementPolicy = {
 } as const;
 
 export interface OrchestrationDeps extends HarnessDeps {
-  readonly clock?: Clock | undefined;
   readonly hooks?: OrchestrationSchedulerHooks | undefined;
 }
 
@@ -330,119 +328,130 @@ function settlementsFor(
   }));
 }
 
-function buildSettlementDecision(
+interface SettlementBuckets {
+  readonly completed: readonly OrchestrationChildResult[];
+  readonly blocked: readonly OrchestrationChildResult[];
+  readonly failed: readonly OrchestrationChildResult[];
+}
+
+function settlementBuckets(
   results: Readonly<Record<string, OrchestrationChildResult>>,
-  requests: ReadonlyMap<string, OrchestrationChildRequest>,
-  policy: SettlementPolicy,
+): SettlementBuckets {
+  const values = Object.values(results);
+  return {
+    completed: values.filter((result) => result.state === "completed"),
+    blocked: values.filter((result) => result.state === "blocked"),
+    failed: values.filter((result) => result.state === "failed"),
+  };
+}
+
+function acceptedApproverDecision(
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  approver: OrchestrationChildResult,
 ): OrchestrationSettlementDecision {
-  const completed = Object.values(results).filter((result) => result.state === "completed");
-  const blocked = Object.values(results).filter((result) => result.state === "blocked");
-  const failed = Object.values(results).filter((result) => result.state === "failed");
-  const acceptedCandidate = completed.at(-1);
-  const approvers = completed.filter((result) => {
-    const request = requests.get(result.childId);
-    return request?.plan.authority.canApproveSettlement === true;
-  });
-  const writerCount = completed.filter((result) => {
-    const request = requests.get(result.childId);
-    return request !== undefined && hasWriteClaim(request);
-  }).length;
+  return {
+    outcome: "accepted",
+    strategy: "escalate-to-reviewer",
+    acceptedChildIds: [approver.childId],
+    discardedChildIds: Object.values(results)
+      .filter((result) => result.childId !== approver.childId)
+      .map((result) => result.childId),
+    escalatedChildIds: [],
+    mergedChildIds: [],
+    reason: {
+      code: "reviewer-required",
+      message: `Accepted ${approver.childId} as the authoritative settlement approver.`,
+    },
+  };
+}
 
-  if (acceptedCandidate !== undefined && approvers.length > 0) {
-    return {
-      outcome: "accepted",
-      strategy: "escalate-to-reviewer",
-      acceptedChildIds: [approvers.at(-1)!.childId],
-      discardedChildIds: Object.values(results)
-        .filter((result) => result.childId !== approvers.at(-1)!.childId)
-        .map((result) => result.childId),
-      escalatedChildIds: [],
-      mergedChildIds: [],
-      reason: {
-        code: "reviewer-required",
-        message: `Accepted ${approvers.at(-1)!.childId} as the authoritative settlement approver.`,
-      },
-    };
-  }
+function singleCompletedDecision(
+  acceptedCandidate: OrchestrationChildResult,
+): OrchestrationSettlementDecision {
+  return {
+    outcome: "accepted",
+    strategy: "prefer-single-writer",
+    acceptedChildIds: [acceptedCandidate.childId],
+    discardedChildIds: [],
+    escalatedChildIds: [],
+    mergedChildIds: [],
+    reason: {
+      code: "single-completed-child",
+      message: `Accepted ${acceptedCandidate.childId} as the sole completed child result.`,
+    },
+  };
+}
 
-  if (acceptedCandidate !== undefined && completed.length === 1 && blocked.length === 0 && failed.length === 0) {
-    return {
-      outcome: "accepted",
-      strategy: "prefer-single-writer",
-      acceptedChildIds: [acceptedCandidate.childId],
-      discardedChildIds: [],
-      escalatedChildIds: [],
-      mergedChildIds: [],
-      reason: {
-        code: "single-completed-child",
-        message: `Accepted ${acceptedCandidate.childId} as the sole completed child result.`,
-      },
-    };
-  }
+function mergedCompletedDecision(
+  completed: readonly OrchestrationChildResult[],
+): OrchestrationSettlementDecision {
+  const childIds = completed.map((result) => result.childId);
+  return {
+    outcome: "merged",
+    strategy: "merge-compatible-results",
+    acceptedChildIds: childIds,
+    discardedChildIds: [],
+    escalatedChildIds: [],
+    mergedChildIds: childIds,
+    reason: {
+      code: "compatible-results",
+      message: `Merged compatible completed results from ${childIds.join(", ")}.`,
+    },
+  };
+}
 
-  if (
-    policy.preferCompatibleMerges &&
-    completed.length > 1 &&
-    areCompatibleForMerge(completed)
-  ) {
-    return {
-      outcome: "merged",
-      strategy: "merge-compatible-results",
-      acceptedChildIds: completed.map((result) => result.childId),
-      discardedChildIds: [],
-      escalatedChildIds: [],
-      mergedChildIds: completed.map((result) => result.childId),
-      reason: {
-        code: "compatible-results",
-        message: `Merged compatible completed results from ${completed.map((result) => result.childId).join(", ")}.`,
-      },
-    };
-  }
+function escalatedDecision(
+  completed: readonly OrchestrationChildResult[],
+  blocked: readonly OrchestrationChildResult[],
+  failed: readonly OrchestrationChildResult[],
+  writerCount: number,
+): OrchestrationSettlementDecision {
+  const escalated = [
+    ...blocked.map((result) => result.childId),
+    ...(completed.length > 1 && writerCount > 1
+      ? completed.map((result) => result.childId)
+      : []),
+  ];
+  return {
+    outcome: "escalated",
+    strategy: "escalate-to-reviewer",
+    acceptedChildIds: [],
+    discardedChildIds: failed.map((result) => result.childId),
+    escalatedChildIds: [...new Set(escalated)],
+    mergedChildIds: [],
+    reason: {
+      code: blocked.length > 0 ? "resource-conflict" : "reviewer-required",
+      message:
+        blocked.length > 0
+          ? `Escalated due to unresolved blocked children: ${blocked.map((result) => result.childId).join(", ")}.`
+          : "Escalated because multiple write-capable child results require reviewer settlement.",
+    },
+  };
+}
 
-  if (
-    policy.escalateOnConflicts &&
-    (blocked.length > 0 || (completed.length > 1 && writerCount > 1))
-  ) {
-    const escalated = [
-      ...blocked.map((result) => result.childId),
-      ...(completed.length > 1 && writerCount > 1
-        ? completed.map((result) => result.childId)
-        : []),
-    ];
-    return {
-      outcome: "escalated",
-      strategy: "escalate-to-reviewer",
-      acceptedChildIds: [],
-      discardedChildIds: failed.map((result) => result.childId),
-      escalatedChildIds: [...new Set(escalated)],
-      mergedChildIds: [],
-      reason: {
-        code: blocked.length > 0 ? "resource-conflict" : "reviewer-required",
-        message:
-          blocked.length > 0
-            ? `Escalated due to unresolved blocked children: ${blocked.map((result) => result.childId).join(", ")}.`
-            : "Escalated because multiple write-capable child results require reviewer settlement.",
-      },
-    };
-  }
+function acceptedCompletedDecision(
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  acceptedCandidate: OrchestrationChildResult,
+): OrchestrationSettlementDecision {
+  return {
+    outcome: "accepted",
+    strategy: "discard-unsafe-results",
+    acceptedChildIds: [acceptedCandidate.childId],
+    discardedChildIds: Object.values(results)
+      .filter((result) => result.childId !== acceptedCandidate.childId)
+      .map((result) => result.childId),
+    escalatedChildIds: [],
+    mergedChildIds: [],
+    reason: {
+      code: "policy-conflict",
+      message: `Accepted ${acceptedCandidate.childId} and discarded incompatible or unsafe sibling results.`,
+    },
+  };
+}
 
-  if (completed.length > 0) {
-    return {
-      outcome: "accepted",
-      strategy: "discard-unsafe-results",
-      acceptedChildIds: [acceptedCandidate!.childId],
-      discardedChildIds: Object.values(results)
-        .filter((result) => result.childId !== acceptedCandidate!.childId)
-        .map((result) => result.childId),
-      escalatedChildIds: [],
-      mergedChildIds: [],
-      reason: {
-        code: "policy-conflict",
-        message: `Accepted ${acceptedCandidate!.childId} and discarded incompatible or unsafe sibling results.`,
-      },
-    };
-  }
-
+function noSafeResultDecision(
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+): OrchestrationSettlementDecision {
   return {
     outcome: "no-safe-result",
     strategy: "discard-unsafe-results",
@@ -455,6 +464,51 @@ function buildSettlementDecision(
       message: "No safe child result was available for acceptance or merge.",
     },
   };
+}
+
+// eslint-disable-next-line complexity -- settlement order is the public orchestration policy table.
+function buildSettlementDecision(
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  requests: ReadonlyMap<string, OrchestrationChildRequest>,
+  policy: SettlementPolicy,
+): OrchestrationSettlementDecision {
+  const { completed, blocked, failed } = settlementBuckets(results);
+  const acceptedCandidate = completed.at(-1);
+  const approvers = completed.filter((result) => {
+    const request = requests.get(result.childId);
+    return request?.plan.authority.canApproveSettlement === true;
+  });
+  const writerCount = completed.filter((result) => {
+    const request = requests.get(result.childId);
+      return request !== undefined && hasWriteClaim(request);
+  }).length;
+
+  const approver = approvers.at(-1);
+  if (acceptedCandidate !== undefined && approver !== undefined) {
+    return acceptedApproverDecision(results, approver);
+  }
+
+  if (acceptedCandidate !== undefined && completed.length === 1 && blocked.length === 0 && failed.length === 0) {
+    return singleCompletedDecision(acceptedCandidate);
+  }
+
+  if (policy.preferCompatibleMerges && completed.length > 1 && areCompatibleForMerge(completed)) {
+    return mergedCompletedDecision(completed);
+  }
+
+  if (policy.escalateOnConflicts && (blocked.length > 0 || (completed.length > 1 && writerCount > 1))) {
+    return escalatedDecision(completed, blocked, failed, writerCount);
+  }
+
+  if (completed.length > 0) {
+    const fallbackCandidate = completed[0];
+    if (fallbackCandidate === undefined) {
+      return noSafeResultDecision(results);
+    }
+    return acceptedCompletedDecision(results, acceptedCandidate ?? fallbackCandidate);
+  }
+
+  return noSafeResultDecision(results);
 }
 
 function transition(
@@ -627,6 +681,12 @@ async function waitForNextResolution(
   active: ReadonlyMap<string, ActiveChild>,
   controller: AbortController,
 ): Promise<readonly [string, Awaited<AgentSession["result"]>] | "aborted"> {
+  if (controller.signal.aborted) {
+    for (const child of active.values()) {
+      child.session.cancel("parent cancelled");
+    }
+    return "aborted";
+  }
   return Promise.race([
     chooseNextCompleted(active),
     new Promise<"aborted">((resolve) => {
@@ -644,6 +704,229 @@ async function waitForNextResolution(
   ]);
 }
 
+function enforceWallTime(
+  active: ReadonlyMap<string, ActiveChild>,
+  clock: Clock,
+  startedAt: number,
+  limits: OrchestrationLimits,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): OrchestrationState | null {
+  if (clock.now() - startedAt <= limits.maxWallTimeMs) {
+    return null;
+  }
+  for (const child of active.values()) {
+    child.session.cancel("parent wall-time exceeded");
+  }
+  return transition(transitions, state, "failed", "orchestration maxWallTimeMs exceeded");
+}
+
+function handleCancellationRequest(
+  active: ReadonlyMap<string, ActiveChild>,
+  controller: AbortController,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): OrchestrationState | null {
+  if (!controller.signal.aborted) {
+    return null;
+  }
+  let nextState = transition(transitions, state, "cancelling", "parent cancellation requested");
+  for (const child of active.values()) {
+    child.session.cancel("parent cancelled");
+  }
+  if (active.size === 0) {
+    nextState = transition(transitions, nextState, "cancelled", "all children cancelled");
+  }
+  return nextState;
+}
+
+// eslint-disable-next-line max-lines-per-function, complexity -- dispatch combines validation, conflict policy, and hook emission at one boundary.
+async function dispatchReadyChildren(
+  orchestration: OrchestrationPlan,
+  requests: ReadonlyMap<string, OrchestrationChildRequest>,
+  results: Record<string, OrchestrationChildResult>,
+  active: Map<string, ActiveChild>,
+  config: OrchestrationConfig,
+  deps: OrchestrationDeps,
+  limits: OrchestrationLimits,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): Promise<{ readonly state: OrchestrationState; readonly dispatchedAny: boolean }> {
+  const ready = readyChildren(orchestration, requests, results, active);
+  let nextState = state;
+  let dispatchedAny = false;
+  for (const child of ready) {
+    if (!canDispatch(orchestration.executionMode, child, active, limits)) {
+      continue;
+    }
+    const validation = validateChild(child);
+    if (validation !== null) {
+      results[child.plan.childId] = {
+        childId: child.plan.childId,
+        state: "failed",
+        attempts: 0,
+        run: undefined,
+        reason: validation,
+      };
+      return { state: transition(transitions, nextState, "failed", validation), dispatchedAny };
+    }
+    const dispatchDecision = evaluateClaims(child, active);
+    if (dispatchDecision.action === "defer") {
+      continue;
+    }
+    if (dispatchDecision.action === "block") {
+      results[child.plan.childId] = {
+        childId: child.plan.childId,
+        state: "blocked",
+        attempts: 0,
+        run: undefined,
+        reason: dispatchDecision.conflicts.map((conflict) => conflict.reason).join("; "),
+        conflicts: dispatchDecision.conflicts,
+      };
+      await deps.hooks?.onBlocked?.(child, dispatchDecision.conflicts);
+      nextState = transition(transitions, nextState, "conflicted", `resource conflict on ${child.plan.childId}`);
+      continue;
+    }
+    await deps.hooks?.beforeDispatch?.(child, [...active.keys()]);
+    nextState = transition(transitions, nextState, "dispatching", `dispatch ${child.plan.childId}`);
+    const session = createSession(child.task, toConfig(config, child), deps);
+    active.set(child.plan.childId, { child, session });
+    await deps.hooks?.afterDispatch?.(child, session, [...active.keys()]);
+    nextState = transition(transitions, nextState, "running", `child ${child.plan.childId} running`);
+    dispatchedAny = true;
+  }
+  return { state: nextState, dispatchedAny };
+}
+
+function enforceAggregateLimits(
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  active: ReadonlyMap<string, ActiveChild>,
+  limits: OrchestrationLimits,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): OrchestrationState | null {
+  const aggregateError = aggregateExceeded(results, limits);
+  if (aggregateError === null) {
+    return null;
+  }
+  for (const child of active.values()) {
+    child.session.cancel(aggregateError);
+  }
+  if (active.size > 0) {
+    return transition(transitions, state, "failed", aggregateError);
+  }
+  return transition(transitions, state, "failed", aggregateError);
+}
+
+function settleIfComplete(
+  orchestration: OrchestrationPlan,
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  active: ReadonlyMap<string, ActiveChild>,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): OrchestrationState | null {
+  if (Object.keys(results).length !== orchestration.children.length || active.size !== 0) {
+    return null;
+  }
+  if (Object.values(results).some((result) => result.state === "blocked")) {
+    return transition(transitions, state, "blocked", "resource conflicts left one or more children blocked");
+  }
+  if (state === "cancelling") {
+    return transition(transitions, state, "cancelled", "all children settled after cancellation");
+  }
+  if (state !== "failed") {
+    return transition(transitions, state, "completed", "all children settled");
+  }
+  return state;
+}
+
+function blockWhenIdle(
+  orchestration: OrchestrationPlan,
+  results: Readonly<Record<string, OrchestrationChildResult>>,
+  active: ReadonlyMap<string, ActiveChild>,
+  dispatchedAny: boolean,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): OrchestrationState | null {
+  if (active.size !== 0 || dispatchedAny) {
+    return null;
+  }
+  const unresolved = orchestration.children
+    .filter((child) => results[child.childId] === undefined)
+    .map((child) => child.childId);
+  return transition(
+    transitions,
+    state,
+    "blocked",
+    `no dispatchable children remain: ${unresolved.join(", ")}`,
+  );
+}
+
+function cancelActiveChildren(
+  active: Map<string, ActiveChild>,
+  results: Record<string, OrchestrationChildResult>,
+): void {
+  for (const [childId] of active.entries()) {
+    results[childId] = {
+      childId,
+      state: "cancelled",
+      attempts: 1,
+      run: undefined,
+      reason: "parent cancelled",
+    };
+  }
+  active.clear();
+}
+
+// eslint-disable-next-line complexity -- child settlement folds cancellation, hook delivery, and sibling-failure escalation together.
+async function settleNextActiveChild(
+  requests: ReadonlyMap<string, OrchestrationChildRequest>,
+  active: Map<string, ActiveChild>,
+  results: Record<string, OrchestrationChildResult>,
+  deps: OrchestrationDeps,
+  controller: AbortController,
+  state: OrchestrationState,
+  transitions: OrchestrationStateTransition[],
+): Promise<OrchestrationState> {
+  const next = await waitForNextResolution(active, controller);
+  if (next === "aborted") {
+    cancelActiveChildren(active, results);
+    return state;
+  }
+  const [childId, run] = next;
+  const current = active.get(childId);
+  active.delete(childId);
+  const policy = current === undefined ? undefined : resolveRolePolicy(current.child);
+  const childState: OrchestrationChildResult["state"] =
+    run.outcome === "completed"
+      ? "completed"
+      : run.outcome === "cancelled"
+        ? "cancelled"
+        : "failed";
+  const childResult: OrchestrationChildResult = {
+    childId,
+    state: childState,
+    attempts: 1,
+    run,
+    reason: `child settled with ${run.outcome}`,
+  };
+  results[childId] = childResult;
+  const completedChild = current?.child ?? requests.get(childId);
+  if (completedChild === undefined) {
+    throw new Error(`orchestration child missing from request map: ${childId}`);
+  }
+  await deps.hooks?.afterCompletion?.(completedChild, childResult);
+
+  if (childState === "failed" && policy?.escalatesOnFailure === true) {
+    for (const child of active.values()) {
+      child.session.cancel(`sibling ${childId} failed`);
+    }
+    return transition(transitions, state, "failed", `child ${childId} failed`);
+  }
+  return state;
+}
+
+// eslint-disable-next-line max-lines-per-function, complexity -- central orchestration loop keeps the state machine in one place.
 async function runOrchestration(
   orchestration: OrchestrationPlan,
   children: readonly OrchestrationChildRequest[],
@@ -658,107 +941,61 @@ async function runOrchestration(
   const transitions: OrchestrationStateTransition[] = [];
   const limits = resolveOrchestrationLimits(config);
   const settlementPolicy = resolveSettlementPolicy(config);
-  const clock = deps.clock;
-  const startedAt = clock?.now() ?? Date.now();
+  const clock = deps.clock ?? systemClock;
+  const startedAt = clock.now();
   let state: OrchestrationState = transition(transitions, "planning", "ready", "orchestration plan accepted");
 
-  while (true) {
-    if ((clock?.now() ?? Date.now()) - startedAt > limits.maxWallTimeMs) {
-      state = transition(transitions, state, "failed", "orchestration maxWallTimeMs exceeded");
-      for (const child of active.values()) {
-        child.session.cancel("parent wall-time exceeded");
-      }
+  for (;;) {
+    const wallTimeState = enforceWallTime(active, clock, startedAt, limits, state, transitions);
+    if (wallTimeState !== null) {
+      state = wallTimeState;
       break;
     }
-    if (controller.signal.aborted) {
-      state = transition(transitions, state, "cancelling", "parent cancellation requested");
-      for (const child of active.values()) {
-        child.session.cancel("parent cancelled");
-      }
-      if (active.size === 0) {
-        state = transition(transitions, state, "cancelled", "all children cancelled");
+    const cancellationState = handleCancellationRequest(active, controller, state, transitions);
+    if (cancellationState !== null) {
+      state = cancellationState;
+      if (state === "cancelled") {
         break;
       }
+      cancelActiveChildren(active, results);
     }
+    const dispatchOutcome = await dispatchReadyChildren(
+      orchestration,
+      requests,
+      results,
+      active,
+      config,
+      deps,
+      limits,
+      state,
+      transitions,
+    );
+    state = dispatchOutcome.state;
 
-    const ready = readyChildren(orchestration, requests, results, active);
-    let dispatchedAny = false;
-    for (const child of ready) {
-      if (!canDispatch(orchestration.executionMode, child, active, limits)) {
-        continue;
-      }
-      const validation = validateChild(child);
-      if (validation !== null) {
-        results[child.plan.childId] = {
-          childId: child.plan.childId,
-          state: "failed",
-          attempts: 0,
-          run: undefined,
-          reason: validation,
-        };
-        state = transition(transitions, state, "failed", validation);
-        break;
-      }
-      const dispatchDecision = evaluateClaims(child, active);
-      if (dispatchDecision.action === "defer") {
-        continue;
-      }
-      if (dispatchDecision.action === "block") {
-        results[child.plan.childId] = {
-          childId: child.plan.childId,
-          state: "blocked",
-          attempts: 0,
-          run: undefined,
-          reason: dispatchDecision.conflicts.map((conflict) => conflict.reason).join("; "),
-          conflicts: dispatchDecision.conflicts,
-        };
-        await deps.hooks?.onBlocked?.(child, dispatchDecision.conflicts);
-        state = transition(transitions, state, "conflicted", `resource conflict on ${child.plan.childId}`);
-        continue;
-      }
-      await deps.hooks?.beforeDispatch?.(child, [...active.keys()]);
-      state = transition(transitions, state, "dispatching", `dispatch ${child.plan.childId}`);
-      const session = createSession(child.task, toConfig(config, child), deps);
-      active.set(child.plan.childId, { child, session });
-      await deps.hooks?.afterDispatch?.(child, session, [...active.keys()]);
-      state = transition(transitions, state, "running", `child ${child.plan.childId} running`);
-      dispatchedAny = true;
-    }
-
-    const aggregateError = aggregateExceeded(results, limits);
-    if (aggregateError !== null) {
-      state = transition(transitions, state, "failed", aggregateError);
-      for (const child of active.values()) {
-        child.session.cancel(aggregateError);
-      }
+    const aggregateState = enforceAggregateLimits(results, active, limits, state, transitions);
+    if (aggregateState !== null) {
+      state = aggregateState;
       if (active.size === 0) {
         break;
       }
     }
 
-    if (Object.keys(results).length === orchestration.children.length && active.size === 0) {
-      if (Object.values(results).some((result) => result.state === "blocked")) {
-        state = transition(transitions, state, "blocked", "resource conflicts left one or more children blocked");
-        break;
-      }
-      if (state === "cancelling") {
-        state = transition(transitions, state, "cancelled", "all children settled after cancellation");
-      } else if (state !== "failed") {
-        state = transition(transitions, state, "completed", "all children settled");
-      }
+    const completionState = settleIfComplete(orchestration, results, active, state, transitions);
+    if (completionState !== null) {
+      state = completionState;
       break;
     }
 
-    if (active.size === 0 && !dispatchedAny) {
-      const unresolved = orchestration.children
-        .filter((child) => results[child.childId] === undefined)
-        .map((child) => child.childId);
-      state = transition(
-        transitions,
-        state,
-        "blocked",
-        `no dispatchable children remain: ${unresolved.join(", ")}`,
-      );
+    const idleState = blockWhenIdle(
+      orchestration,
+      results,
+      active,
+      dispatchOutcome.dispatchedAny,
+      state,
+      transitions,
+    );
+    if (idleState !== null) {
+      state = idleState;
       break;
     }
 
@@ -766,35 +1003,7 @@ async function runOrchestration(
       continue;
     }
 
-    const next = await waitForNextResolution(active, controller);
-    if (next === "aborted") {
-      continue;
-    }
-    const [childId, run] = next;
-    const current = active.get(childId);
-    active.delete(childId);
-    const policy = current === undefined ? undefined : resolveRolePolicy(current.child);
-    const childState: OrchestrationChildResult["state"] =
-      run.outcome === "completed"
-        ? "completed"
-        : run.outcome === "cancelled"
-          ? "cancelled"
-          : "failed";
-    results[childId] = {
-      childId,
-      state: childState,
-      attempts: 1,
-      run,
-      reason: `child settled with ${run.outcome}`,
-    };
-    await deps.hooks?.afterCompletion?.(current?.child ?? requests.get(childId)!, results[childId]!);
-
-    if (childState === "failed" && policy?.escalatesOnFailure === true) {
-      state = transition(transitions, state, "failed", `child ${childId} failed`);
-      for (const child of active.values()) {
-        child.session.cancel(`sibling ${childId} failed`);
-      }
-    }
+    state = await settleNextActiveChild(requests, active, results, deps, controller, state, transitions);
   }
 
   return {

@@ -340,14 +340,9 @@ function mapRunStartError(error: unknown): RouteResult {
   throw error;
 }
 
-// Route 5 — POST /api/runs. Validates the body, resolves the ModelPort, starts the run, returns 202.
-export async function handleCreateRun(
-  ctx: RouteContext,
-  deps: UiHandlerDeps,
-): Promise<RouteResult> {
-  let raw: string;
+async function readRequestBody(req: RouteContext["req"]): Promise<string | RouteResult> {
   try {
-    raw = await readBody(ctx.req);
+    return await readBody(req);
   } catch (error) {
     if (error instanceof BodyTooLargeError) {
       return {
@@ -356,6 +351,34 @@ export async function handleCreateRun(
       };
     }
     throw error;
+  }
+}
+
+function createRunEngineContext(
+  parsed: RunRequest,
+  deps: UiHandlerDeps,
+  model: ModelPort,
+): EngineContext {
+  return {
+    request: parsed,
+    model,
+    registry: deps.registry,
+    evidence: {
+      store: deps.evidenceStore,
+      env: deps.env,
+      additionalSecrets: currentRedactionSecrets(deps),
+    },
+  };
+}
+
+// Route 5 — POST /api/runs. Validates the body, resolves the ModelPort, starts the run, returns 202.
+export async function handleCreateRun(
+  ctx: RouteContext,
+  deps: UiHandlerDeps,
+): Promise<RouteResult> {
+  const raw = await readRequestBody(ctx.req);
+  if (typeof raw !== "string") {
+    return raw;
   }
   const parsed = parseRunRequest(raw);
   if ("code" in parsed) {
@@ -369,16 +392,7 @@ export async function handleCreateRun(
   if (model === undefined) {
     return { status: 400, body: errorBody("NO_MODEL", "No model provider is configured.") };
   }
-  const engineCtx: EngineContext = {
-    request: parsed,
-    model,
-    registry: deps.registry,
-    evidence: {
-      store: deps.evidenceStore,
-      env: deps.env,
-      additionalSecrets: currentRedactionSecrets(deps),
-    },
-  };
+  const engineCtx = createRunEngineContext(parsed, deps, model);
   try {
     const started = startRun(engineCtx, deps.redactor);
     return {
