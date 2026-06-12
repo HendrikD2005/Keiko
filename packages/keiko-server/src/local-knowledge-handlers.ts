@@ -50,7 +50,6 @@ import {
   verifyEmbeddingCapability,
   type GatewayConfig,
   type GatewayOpenAiCompatibleProviderConfig,
-  type ModelProviderConfig,
   type OpenAIEmbeddingAdapter,
   type OpenAIEmbeddingOutcome,
   type OpenAIEmbeddingRequest,

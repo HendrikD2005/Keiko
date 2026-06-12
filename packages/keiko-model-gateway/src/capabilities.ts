@@ -107,6 +107,7 @@ export function createDefaultChatCapability(modelId: string): ModelCapability {
 }
 
 export function createDefaultCodexLocalSessionCapability(modelId: string): ModelCapability {
+  const isMiniModel = modelId.includes("mini");
   return {
     id: modelId,
     kind: "chat",
@@ -118,8 +119,8 @@ export function createDefaultCodexLocalSessionCapability(modelId: string): Model
     supportsImageInput: false,
     supportsDocumentInput: false,
     workflowEligible: true,
-    costClass: /mini/u.test(modelId) ? "low" : "medium",
-    latencyClass: /mini/u.test(modelId) ? "fast" : "standard",
+    costClass: isMiniModel ? "low" : "medium",
+    latencyClass: isMiniModel ? "fast" : "standard",
     throughputHint: "Codex local session",
     preferredUseCases: ["Local coding workflow"],
     knownLimitations: [

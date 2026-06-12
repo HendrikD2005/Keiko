@@ -71,18 +71,18 @@ function execJsonl(content: string): string {
 function runner(
   responses: Readonly<Record<string, { readonly stdout: string; readonly exitCode?: number }>>,
 ): CodexCliCommandRunner {
-  return async (input) => {
+  return (input) => {
     const key = `${input.command}:${input.modelId ?? ""}`;
     const result = responses[key];
     if (result === undefined) {
       throw new Error(`unexpected command ${key}`);
     }
-    return {
+    return Promise.resolve({
       stdout: result.stdout,
       stderr: "",
       exitCode: result.exitCode ?? 0,
       terminatedBySignal: null,
-    };
+    });
   };
 }
 
@@ -162,7 +162,7 @@ describe("CodexLocalSessionAdapter", () => {
       runner({
         "version:": { stdout: "codex-cli 0.138.0-alpha.7" },
         "doctor-json:": { stdout: okDoctor() },
-        "exec-json:gpt-5.4": { stdout: execJsonl('{\"answer\":42}') },
+        "exec-json:gpt-5.4": { stdout: execJsonl('{"answer":42}') },
       }),
     );
     const result = await subject.call(

@@ -3,7 +3,6 @@ import { Gateway } from "./gateway.js";
 import { createDefaultProviderRegistry, StaticProviderRegistry } from "./provider-registry.js";
 import {
   CircuitOpenError,
-  ConfigInvalidError,
   TransportError,
   UnknownModelError,
 } from "@oscharko-dev/keiko-security/errors/gateway";
@@ -69,8 +68,8 @@ function fakeAdapter(impl: ProviderAdapter["call"]): ProviderAdapter {
 function registryFor(adapter: ProviderAdapter): ProviderRegistry {
   return new StaticProviderRegistry({
     adapters: new Map([
-      ["gateway-openai-compatible", () => adapter],
-      ["openai-codex-local-session", () => adapter],
+      ["gateway-openai-compatible", (): ProviderAdapter => adapter],
+      ["openai-codex-local-session", (): ProviderAdapter => adapter],
     ]),
   });
 }
@@ -330,17 +329,17 @@ describe("Gateway.chat", () => {
       ]),
       {
         providerRegistry: createDefaultProviderRegistry({
-          codexCliCommandRunner: async (input) => {
+          codexCliCommandRunner: (input) => {
             if (input.command === "version") {
-              return {
+              return Promise.resolve({
                 stdout: "codex-cli 0.138.0-alpha.7",
                 stderr: "",
                 exitCode: 0,
                 terminatedBySignal: null,
-              };
+              });
             }
             if (input.command === "doctor-json") {
-              return {
+              return Promise.resolve({
                 stdout: JSON.stringify({
                   overallStatus: "ok",
                   checks: {
@@ -351,10 +350,10 @@ describe("Gateway.chat", () => {
                 stderr: "",
                 exitCode: 0,
                 terminatedBySignal: null,
-              };
+              });
             }
             if (input.command === "exec-json") {
-              return {
+              return Promise.resolve({
                 stdout: [
                   JSON.stringify({ type: "turn.started" }),
                   JSON.stringify({
@@ -369,7 +368,7 @@ describe("Gateway.chat", () => {
                 stderr: "",
                 exitCode: 0,
                 terminatedBySignal: null,
-              };
+              });
             }
             throw new Error(`unexpected command ${input.command}`);
           },

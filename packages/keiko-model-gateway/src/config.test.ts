@@ -55,9 +55,10 @@ function gatewayProviderAt(
   index = 0,
 ): GatewayOpenAiCompatibleProviderConfig {
   const provider = config.providers[index];
-  expect(provider).toBeDefined();
-  expect(isGatewayOpenAiCompatibleProviderConfig(provider!)).toBe(true);
-  return provider as GatewayOpenAiCompatibleProviderConfig;
+  if (provider === undefined || !isGatewayOpenAiCompatibleProviderConfig(provider)) {
+    throw new Error(`expected provider ${String(index)} to be OpenAI-compatible`);
+  }
+  return provider;
 }
 
 describe("parseGatewayConfig", () => {

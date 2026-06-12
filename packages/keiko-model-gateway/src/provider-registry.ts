@@ -14,31 +14,8 @@ import type {
 } from "./types.js";
 import { isGatewayOpenAiCompatibleProviderConfig } from "./types.js";
 
-class UnsupportedProviderAdapter implements ProviderAdapter {
-  constructor(readonly providerType: ModelProviderConfig["providerType"]) {}
-
-  call(): Promise<never> {
-    return Promise.reject(
-      new ConfigInvalidError(
-        `provider type '${this.providerType}' is configured but no runtime adapter is registered yet`,
-      ),
-    );
-  }
-
-  callStream(): AsyncIterable<never> {
-    const error = new ConfigInvalidError(
-      `provider type '${this.providerType}' is configured but no runtime adapter is registered yet`,
-    );
-    return {
-      [Symbol.asyncIterator](): AsyncIterator<never> {
-        return {
-          next(): Promise<IteratorResult<never>> {
-            return Promise.reject(error);
-          },
-        };
-      },
-    };
-  }
+function providerTypeLabel(providerType: ModelProviderConfig["providerType"] | undefined): string {
+  return providerType ?? "gateway-openai-compatible";
 }
 
 function openAiAdapterFactory(context: ProviderAdapterFactoryContext): ProviderAdapter {
@@ -49,12 +26,6 @@ function openAiAdapterFactory(context: ProviderAdapterFactoryContext): ProviderA
     ...(context.fetchImpl === undefined ? {} : { fetchImpl: context.fetchImpl }),
   };
   return new OpenAiAdapter(deps);
-}
-
-function unsupportedAdapterFactory(
-  providerType: ModelProviderConfig["providerType"],
-): ProviderAdapterFactory {
-  return () => new UnsupportedProviderAdapter(providerType);
 }
 
 function codexLocalSessionAdapterFactory(
@@ -81,10 +52,12 @@ export class StaticProviderRegistry implements ProviderRegistry {
   }
 
   resolve(config: ModelProviderConfig, context: ProviderAdapterFactoryContext): ProviderAdapter {
-    const providerType = config.providerType ?? "gateway-openai-compatible";
+    const providerType = providerTypeLabel(config.providerType);
     const factory = this.adapters.get(providerType);
     if (factory === undefined) {
-      throw new ConfigInvalidError(`no runtime adapter is registered for provider type '${providerType}'`);
+      throw new ConfigInvalidError(
+        `no runtime adapter is registered for provider type '${providerType}'`,
+      );
     }
     const adapter = factory(context);
     adapter.validateConfig?.(config);
@@ -110,18 +83,21 @@ export function defaultAdapterFactories(
   return new Map<string, ProviderAdapterFactory>([
     [
       "gateway-openai-compatible",
-      (context) => {
+      (context): ProviderAdapter => {
         const adapter = openAiAdapterFactory(context);
         return {
           ...adapter,
           providerType: "gateway-openai-compatible" as const,
-          validateConfig: (config: ModelProviderConfig): void => gatewayConfigValidator(config),
+          validateConfig: (config: ModelProviderConfig): void => {
+            gatewayConfigValidator(config);
+          },
         };
       },
     ],
     [
       "openai-codex-local-session",
-      (context) => codexLocalSessionAdapterFactory(context, deps.codexCliCommandRunner),
+      (context): ProviderAdapter =>
+        codexLocalSessionAdapterFactory(context, deps.codexCliCommandRunner),
     ],
   ]);
 }
@@ -139,12 +115,12 @@ export function createDefaultProviderRegistry(
   );
   const gatewayFactory = adapters.get("gateway-openai-compatible");
   if (gatewayFactory !== undefined && deps.fetchImpl !== undefined) {
-    adapters.set("gateway-openai-compatible", (context) =>
-      gatewayFactory({
+    adapters.set("gateway-openai-compatible", (context): ProviderAdapter => {
+      return gatewayFactory({
         ...context,
         ...(context.fetchImpl === undefined ? { fetchImpl: deps.fetchImpl } : {}),
-      }),
-    );
+      });
+    });
   }
   return new StaticProviderRegistry({ adapters });
 }

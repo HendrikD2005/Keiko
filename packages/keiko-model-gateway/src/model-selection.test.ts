@@ -167,7 +167,11 @@ describe("findConfiguredCapability", () => {
       workflowEligible: true,
       streaming: false,
     });
-    expect(isConversationEligibleModel(capability!)).toBe(true);
+    expect(capability).toBeDefined();
+    if (capability === undefined) {
+      expect.unreachable("expected a derived capability");
+    }
+    expect(isConversationEligibleModel(capability)).toBe(true);
   });
 });
 

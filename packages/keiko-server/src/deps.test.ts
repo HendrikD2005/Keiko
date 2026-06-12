@@ -128,8 +128,6 @@ describe("buildUiHandlerDeps — Gateway env fallback", () => {
       "example-chat-model",
     ]);
     const configuredProvider = deps.config?.providers[0];
-    expect(configuredProvider).toBeDefined();
-    expect(isGatewayOpenAiCompatibleProviderConfig(configuredProvider!)).toBe(true);
     if (
       configuredProvider === undefined ||
       !isGatewayOpenAiCompatibleProviderConfig(configuredProvider)
@@ -157,8 +155,6 @@ describe("buildUiHandlerDeps — Gateway env fallback", () => {
 
     expect(deps.configPresent).toBe(true);
     const configuredProvider = deps.config?.providers[0];
-    expect(configuredProvider).toBeDefined();
-    expect(isGatewayOpenAiCompatibleProviderConfig(configuredProvider!)).toBe(true);
     if (
       configuredProvider === undefined ||
       !isGatewayOpenAiCompatibleProviderConfig(configuredProvider)

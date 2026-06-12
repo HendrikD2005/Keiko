@@ -27,4 +27,4 @@ export interface ProviderValidationState {
   readonly message?: string | undefined;
 }
 
-export interface ProviderSelection extends ProviderIdentity {}
+export type ProviderSelection = ProviderIdentity;

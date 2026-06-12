@@ -228,8 +228,6 @@ describe("handleGatewaySetup", () => {
     );
     expect(result.status).toBe(200);
     const configuredProvider = currentGatewayConfig(deps)?.providers[0];
-    expect(configuredProvider).toBeDefined();
-    expect(isGatewayOpenAiCompatibleProviderConfig(configuredProvider!)).toBe(true);
     if (
       configuredProvider === undefined ||
       !isGatewayOpenAiCompatibleProviderConfig(configuredProvider)

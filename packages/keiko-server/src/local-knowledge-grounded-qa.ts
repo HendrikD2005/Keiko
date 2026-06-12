@@ -35,11 +35,12 @@ import {
   findCapability,
   findConfiguredCapability,
   isGatewayOpenAiCompatibleProviderConfig,
-  requestOpenAIEmbedding,
-  type GatewayConfig,
-  type OpenAIEmbeddingAdapter,
-  type OpenAIEmbeddingOutcome,
-  type OpenAIEmbeddingRequest,
+    requestOpenAIEmbedding,
+    type GatewayConfig,
+    type GatewayOpenAiCompatibleProviderConfig,
+    type OpenAIEmbeddingAdapter,
+    type OpenAIEmbeddingOutcome,
+    type OpenAIEmbeddingRequest,
 } from "@oscharko-dev/keiko-model-gateway";
 import { redact } from "@oscharko-dev/keiko-security";
 import type { UiHandlerDeps } from "./deps.js";
@@ -156,6 +157,29 @@ function isConfiguredEmbeddingModel(config: GatewayConfig, modelId: string): boo
   return findConfiguredCapability(config, modelId)?.kind === "embedding";
 }
 
+function embeddingProviderForModel(
+  config: GatewayConfig,
+  modelId: string,
+): GatewayOpenAiCompatibleProviderConfig | RouteResult {
+  const provider = config.providers.find((entry) => entry.modelId === modelId);
+  if (provider === undefined) {
+    return conflict(`No configured embedding provider matches local knowledge model ${modelId}.`);
+  }
+  if (!isGatewayOpenAiCompatibleProviderConfig(provider)) {
+    return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
+  }
+  if (!isConfiguredEmbeddingModel(config, provider.modelId)) {
+    return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
+  }
+  return provider;
+}
+
+function isRouteResult(
+  value: GatewayOpenAiCompatibleProviderConfig | RouteResult,
+): value is RouteResult {
+  return "status" in value;
+}
+
 export function createEmbeddingAdapter(
   deps: UiHandlerDeps,
   capsules: readonly KnowledgeCapsule[],
@@ -166,15 +190,9 @@ export function createEmbeddingAdapter(
   }
   for (const capsule of capsules) {
     const modelId = capsule.embeddingModelIdentity.modelId;
-    const provider = config.providers.find((entry) => entry.modelId === modelId);
-    if (provider === undefined) {
-      return conflict(`No configured embedding provider matches local knowledge model ${modelId}.`);
-    }
-    if (!isGatewayOpenAiCompatibleProviderConfig(provider)) {
-      return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
-    }
-    if (!isConfiguredEmbeddingModel(config, provider.modelId)) {
-      return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
+    const provider = embeddingProviderForModel(config, modelId);
+    if (isRouteResult(provider)) {
+      return provider;
     }
     if (
       !storedProviderMatchesConfiguredProvider(

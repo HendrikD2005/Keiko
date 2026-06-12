@@ -4,7 +4,6 @@ import {
   CancelledError,
   ConfigInvalidError,
   ProviderError,
-  TimeoutError,
   TransportError,
 } from "@oscharko-dev/keiko-security/errors/gateway";
 import type { ModelCapability } from "./types.js";
@@ -118,9 +117,9 @@ function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseJson<T>(stdout: string, label: string, version: string | undefined): T {
+function parseJson(stdout: string, label: string, version: string | undefined): unknown {
   try {
-    return JSON.parse(stdout) as T;
+    return JSON.parse(stdout) as unknown;
   } catch {
     const versionHint = version === undefined ? "unknown version" : `version '${version}'`;
     throw new ConfigInvalidError(
@@ -129,24 +128,34 @@ function parseJson<T>(stdout: string, label: string, version: string | undefined
   }
 }
 
+function isAuthenticationFailure(text: string): boolean {
+  return /(login|logged in|auth|session|token|credential)/u.test(text);
+}
+
+function isUnsupportedCliInterface(text: string): boolean {
+  return /(unknown option|unexpected argument|unrecognized|invalid value|usage: codex)/u.test(
+    text,
+  );
+}
+
 function classifyExecFailure(
   stderr: string,
   exitCode: number,
   modelId: string,
 ): ProviderError | AuthenticationError | ConfigInvalidError {
-  const signal = `${stderr}`.toLowerCase();
-  if (/(login|logged in|auth|session|token|credential)/u.test(signal)) {
+  const signal = stderr.toLowerCase();
+  if (isAuthenticationFailure(signal)) {
     return new AuthenticationError(
       `codex local session is not authenticated for '${modelId}'`,
     );
   }
-  if (/(unknown option|unexpected argument|unrecognized|invalid value|usage: codex)/u.test(signal)) {
+  if (isUnsupportedCliInterface(signal)) {
     return new ConfigInvalidError(
       `codex CLI does not support the required local-session machine interface for '${modelId}'`,
     );
   }
   return new ProviderError(
-    `codex local-session execution failed for '${modelId}' (exit ${exitCode})`,
+    `codex local-session execution failed for '${modelId}' (exit ${String(exitCode)})`,
     502,
   );
 }
@@ -159,18 +168,25 @@ function parseVersionString(stdout: string): string {
   return version;
 }
 
+function doctorAuthStatus(doctor: CodexDoctorReport): string | undefined {
+  return doctor.checks?.["auth.credentials"]?.status;
+}
+
+function doctorWebsocketCheck(doctor: CodexDoctorReport): CodexCheckDetails | undefined {
+  return doctor.checks?.["network.websocket_reachability"];
+}
+
 function classifyDoctorFailure(
   doctor: CodexDoctorReport,
   modelId: string,
 ): AuthenticationError | ProviderError {
-  const auth = doctor.checks?.["auth.credentials"];
-  if (auth?.status !== "ok") {
+  if (doctorAuthStatus(doctor) !== "ok") {
     throw new AuthenticationError(`codex local session is not authenticated for '${modelId}'`);
   }
-  const websocket = doctor.checks?.["network.websocket_reachability"];
+  const websocket = doctorWebsocketCheck(doctor);
   if (websocket?.status !== "ok") {
-    const summary = `${websocket?.summary ?? ""}`.toLowerCase();
-    if (/(auth|session|token|login|credential)/u.test(summary)) {
+    const summary = (websocket?.summary ?? "").toLowerCase();
+    if (isAuthenticationFailure(summary)) {
       throw new AuthenticationError(
         `codex local session is not ready to serve '${modelId}'`,
       );
@@ -189,52 +205,82 @@ function classifyDoctorFailure(
   return new ProviderError(`codex local session is unavailable for '${modelId}'`, 503);
 }
 
+interface ParsedExecEvent {
+  readonly type: string;
+  readonly item?: Readonly<Record<string, unknown>> | undefined;
+  readonly usage?: Readonly<Record<string, unknown>> | undefined;
+}
+
+function parseExecEventLine(line: string): ParsedExecEvent | undefined {
+  let event: unknown;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  if (!isJsonRecord(event) || typeof event.type !== "string") {
+    return undefined;
+  }
+  return {
+    type: event.type,
+    ...(isJsonRecord(event.item) ? { item: event.item } : {}),
+    ...(isJsonRecord(event.usage) ? { usage: event.usage } : {}),
+  };
+}
+
+function updateExecState(
+  state: { latestContent: string | undefined; usage: CodexExecUsage },
+  event: ParsedExecEvent,
+): void {
+  if (
+    event.type === "item.completed" &&
+    event.item?.type === "agent_message" &&
+    typeof event.item.text === "string"
+  ) {
+    state.latestContent = event.item.text;
+    return;
+  }
+  if (event.type === "turn.completed" && event.usage !== undefined) {
+    state.usage = {
+      promptTokens: typeof event.usage.input_tokens === "number" ? event.usage.input_tokens : 0,
+      completionTokens:
+        typeof event.usage.output_tokens === "number" ? event.usage.output_tokens : 0,
+    };
+  }
+}
+
 function parseExecJsonl(stdout: string, modelId: string): CodexExecResult {
   const lines = stdout
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  let latestContent: string | undefined;
-  let usage: CodexExecUsage = { promptTokens: 0, completionTokens: 0 };
+  const state: { latestContent: string | undefined; usage: CodexExecUsage } = {
+    latestContent: undefined,
+    usage: { promptTokens: 0, completionTokens: 0 },
+  };
   for (const line of lines) {
-    let event: unknown;
-    try {
-      event = JSON.parse(line);
-    } catch {
+    const event = parseExecEventLine(line);
+    if (event === undefined) {
       continue;
     }
-    if (!isJsonRecord(event) || typeof event.type !== "string") {
-      continue;
-    }
-    if (event.type === "item.completed" && isJsonRecord(event.item)) {
-      if (event.item.type === "agent_message" && typeof event.item.text === "string") {
-        latestContent = event.item.text;
-      }
-    }
-    if (event.type === "turn.completed" && isJsonRecord(event.usage)) {
-      usage = {
-        promptTokens:
-          typeof event.usage.input_tokens === "number" ? event.usage.input_tokens : 0,
-        completionTokens:
-          typeof event.usage.output_tokens === "number" ? event.usage.output_tokens : 0,
-      };
-    }
+    updateExecState(state, event);
   }
-  if (latestContent === undefined) {
+  if (state.latestContent === undefined) {
     throw new ProviderError(
       `codex local session returned no assistant message for '${modelId}'`,
       502,
     );
   }
-  return { content: latestContent, usage };
+  return { content: state.latestContent, usage: state.usage };
 }
 
 function mapCatalogEntryToCapability(entry: CodexModelCatalogEntry): ModelCapability {
   const slug = entry.slug;
   const defaultCapability = createDefaultChatCapability(slug);
+  const isMiniModel = slug.includes("mini");
   const costClass =
-    /mini/u.test(slug) ? "low" : /(gpt-5\.5|gpt-5\.4)$/u.test(slug) ? "high" : "medium";
-  const latencyClass = /mini/u.test(slug) ? "fast" : "standard";
+    isMiniModel ? "low" : slug.endsWith("gpt-5.4") || slug.endsWith("gpt-5.5") ? "high" : "medium";
+  const latencyClass = isMiniModel ? "fast" : "standard";
   return {
     ...defaultCapability,
     toolCalling: false,
@@ -259,84 +305,155 @@ function mapCatalogEntryToCapability(entry: CodexModelCatalogEntry): ModelCapabi
   };
 }
 
-export const defaultCodexCliCommandRunner: CodexCliCommandRunner = (input) =>
-  new Promise<CodexCliCommandResult>((resolve, reject) => {
-    const executable = input.executable ?? DEFAULT_CODEX_EXECUTABLE;
-    const child = spawn(executable, argsFor(input.command, input.modelId), {
-      cwd: input.cwd ?? process.cwd(),
-      env: process.env,
-      shell: false,
-      stdio: "pipe",
+function createFinish(): (fn: () => void) => void {
+  let settled = false;
+  return (fn: () => void): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    fn();
+  };
+}
+
+function rejectOutputOverflow(
+  child: ReturnType<typeof spawn>,
+  finish: (fn: () => void) => void,
+  reject: (reason: ProviderError) => void,
+  message: string,
+): void {
+  child.kill("SIGTERM");
+  finish(() => {
+    reject(new ProviderError(message, 502));
+  });
+}
+
+function appendBoundedChunk(
+  child: ReturnType<typeof spawn>,
+  finish: (fn: () => void) => void,
+  reject: (reason: ProviderError) => void,
+  current: string,
+  chunk: Buffer,
+  nextBytes: number,
+  overflowMessage: string,
+): string {
+  if (nextBytes > MAX_OUTPUT_BYTES) {
+    rejectOutputOverflow(child, finish, reject, overflowMessage);
+    return current;
+  }
+  return current + chunk.toString("utf8");
+}
+
+function requirePipedStream<T>(stream: T | null, name: "stdin" | "stdout" | "stderr"): T {
+  if (stream === null) {
+    throw new TransportError(`codex CLI ${name} pipe was not created`);
+  }
+  return stream;
+}
+
+function spawnCodexChild(input: CodexCliCommandInput): ReturnType<typeof spawn> {
+  const executable = input.executable ?? DEFAULT_CODEX_EXECUTABLE;
+  return spawn(executable, argsFor(input.command, input.modelId), {
+    cwd: input.cwd ?? process.cwd(),
+    env: process.env,
+    shell: false,
+    stdio: "pipe",
+  });
+}
+
+function attachOutputHandlers(
+  child: ReturnType<typeof spawn>,
+  finish: (fn: () => void) => void,
+  reject: (reason: ProviderError) => void,
+): {
+  readonly readStdout: () => string;
+  readonly readStderr: () => string;
+} {
+  const stdoutStream = requirePipedStream(child.stdout, "stdout");
+  const stderrStream = requirePipedStream(child.stderr, "stderr");
+  let stdout = "";
+  let stderr = "";
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  stdoutStream.on("data", (chunk: Buffer) => {
+    stdoutBytes += chunk.length;
+    stdout = appendBoundedChunk(
+      child,
+      finish,
+      reject,
+      stdout,
+      chunk,
+      stdoutBytes,
+      "codex CLI output exceeded the safety limit",
+    );
+  });
+  stderrStream.on("data", (chunk: Buffer) => {
+    stderrBytes += chunk.length;
+    stderr = appendBoundedChunk(
+      child,
+      finish,
+      reject,
+      stderr,
+      chunk,
+      stderrBytes,
+      "codex CLI stderr exceeded the safety limit",
+    );
+  });
+  return {
+    readStdout: (): string => stdout,
+    readStderr: (): string => stderr,
+  };
+}
+
+function runCodexCommandProcess(
+  input: CodexCliCommandInput,
+  resolve: (result: CodexCliCommandResult) => void,
+  reject: (reason: Error) => void,
+): void {
+  const child = spawnCodexChild(input);
+  const finish = createFinish();
+  const { readStdout, readStderr } = attachOutputHandlers(child, finish, reject);
+  const onAbort = (): void => {
+    child.kill("SIGTERM");
+    finish(() => {
+      reject(new CancelledError(`codex ${input.command} was cancelled`));
     });
-    let stdout = "";
-    let stderr = "";
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let settled = false;
-
-    const finish = (fn: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      fn();
-    };
-
-    const onAbort = (): void => {
-      child.kill("SIGTERM");
-      finish(() => reject(new CancelledError(`codex ${input.command} was cancelled`)));
-    };
-
-    input.signal?.addEventListener("abort", onAbort, { once: true });
-
-    child.on("error", (error) => {
-      input.signal?.removeEventListener("abort", onAbort);
-      finish(() =>
-        reject(
-          new TransportError(
-            `codex CLI could not be started: ${error instanceof Error ? error.message : "unknown error"}`,
-          ),
+  };
+  input.signal?.addEventListener("abort", onAbort, { once: true });
+  child.on("error", (error) => {
+    input.signal?.removeEventListener("abort", onAbort);
+    finish(() => {
+      reject(
+        new TransportError(
+          `codex CLI could not be started: ${error instanceof Error ? error.message : "unknown error"}`,
         ),
       );
     });
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutBytes += chunk.length;
-      if (stdoutBytes > MAX_OUTPUT_BYTES) {
-        child.kill("SIGTERM");
-        finish(() => reject(new ProviderError("codex CLI output exceeded the safety limit", 502)));
-        return;
-      }
-      stdout += chunk.toString("utf8");
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes += chunk.length;
-      if (stderrBytes > MAX_OUTPUT_BYTES) {
-        child.kill("SIGTERM");
-        finish(() => reject(new ProviderError("codex CLI stderr exceeded the safety limit", 502)));
-        return;
-      }
-      stderr += chunk.toString("utf8");
-    });
-
-    child.on("close", (exitCode, signal) => {
-      input.signal?.removeEventListener("abort", onAbort);
-      finish(() =>
-        resolve({
-          stdout,
-          stderr,
-          exitCode: exitCode ?? 1,
-          terminatedBySignal: signal,
-        }),
-      );
-    });
-
-    if (input.stdinText !== undefined) {
-      child.stdin.write(input.stdinText);
-    }
-    child.stdin.end();
   });
+  child.on("close", (exitCode, signal) => {
+    input.signal?.removeEventListener("abort", onAbort);
+    finish(() => {
+      resolve({
+        stdout: readStdout(),
+        stderr: readStderr(),
+        exitCode: exitCode ?? 1,
+        terminatedBySignal: signal,
+      });
+    });
+  });
+  if (input.stdinText !== undefined) {
+    requirePipedStream(child.stdin, "stdin").write(input.stdinText);
+  }
+  requirePipedStream(child.stdin, "stdin").end();
+}
+
+export const defaultCodexCliCommandRunner: CodexCliCommandRunner = function defaultCodexCliCommandRunner(
+  input,
+) {
+  return new Promise<CodexCliCommandResult>((resolve, reject) => {
+    runCodexCommandProcess(input, resolve, reject);
+  });
+};
 
 export interface CodexCliClientDeps {
   readonly commandRunner?: CodexCliCommandRunner | undefined;
@@ -370,7 +487,7 @@ export class CodexCliClient {
   }
 
   async version(): Promise<string> {
-    this.versionPromise ??= (async () => {
+    this.versionPromise ??= (async (): Promise<string> => {
       const result = await this.run("version");
       if (result.exitCode !== 0) {
         throw new ConfigInvalidError(
@@ -395,7 +512,7 @@ export class CodexCliClient {
   }
 
   async doctor(signal?: AbortSignal): Promise<CodexDoctorReport> {
-    this.doctorPromise ??= (async () => {
+    this.doctorPromise ??= (async (): Promise<CodexDoctorReport> => {
       const version = await this.version();
       const result = await this.run("doctor-json", { signal });
       if (result.exitCode !== 0) {
@@ -403,21 +520,23 @@ export class CodexCliClient {
           `codex CLI ${version} does not support the required doctor JSON interface`,
         );
       }
-      return parseJson<CodexDoctorReport>(result.stdout, "`codex doctor --json`", version);
+      return parseJson(
+        result.stdout,
+        "`codex doctor --json`",
+        version,
+      ) as CodexDoctorReport;
     })();
     return this.doctorPromise;
   }
 
   async ensureReady(modelId: string, signal?: AbortSignal): Promise<void> {
     const doctor = await this.doctor(signal);
-    if (doctor.checks?.["auth.credentials"]?.status !== "ok") {
+    const authStatus = doctorAuthStatus(doctor);
+    const websocketStatus = doctorWebsocketCheck(doctor)?.status;
+    if (authStatus !== "ok") {
       await this.loginStatus(signal);
     }
-    if (
-      doctor.checks?.["auth.credentials"]?.status !== "ok" ||
-      doctor.checks?.["network.websocket_reachability"]?.status !== "ok" ||
-      doctor.overallStatus === "fail"
-    ) {
+    if (authStatus !== "ok" || websocketStatus !== "ok" || doctor.overallStatus === "fail") {
       throw classifyDoctorFailure(doctor, modelId);
     }
   }
@@ -430,7 +549,11 @@ export class CodexCliClient {
         `codex CLI ${version} does not support the required model discovery interface`,
       );
     }
-    const catalog = parseJson<CodexModelCatalog>(result.stdout, "`codex debug models`", version);
+    const catalog = parseJson(
+      result.stdout,
+      "`codex debug models`",
+      version,
+    ) as CodexModelCatalog;
     return (catalog.models ?? [])
       .filter((entry) => entry.supported_in_api !== false)
       .filter((entry) => entry.visibility !== "hide")
