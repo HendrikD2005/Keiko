@@ -585,9 +585,7 @@ describe("cleanScopedNodesToScreenIr — a11y colour extraction", () => {
   it("projects a TEXT node's solid fill to textColor (never backgroundColor)", () => {
     const result = cleanScopedNodesToScreenIr(
       canvas("0:1", [
-        screenFrame("1:1", "Card", [
-          { ...text("1:2", "Hello"), fills: [solidFill(0, 0, 0)] },
-        ]),
+        screenFrame("1:1", "Card", [{ ...text("1:2", "Hello"), fills: [solidFill(0, 0, 0)] }]),
       ]),
     );
     const t = findById(result.screens[0]?.root, "1:2");
@@ -616,5 +614,249 @@ describe("cleanScopedNodesToScreenIr — a11y colour extraction", () => {
 
     expect(frameNode?.textColor).toBeUndefined();
     expect(frameNode?.backgroundColor).toBeUndefined();
+  });
+});
+
+// ─── Fix #3: code-unit sort (non-ASCII ordering regression) ─────────────────
+// Bare localeCompare is locale-sensitive and may reorder ids differently across platforms.
+// The fix uses a code-unit comparator so 'Ö' (U+00D6) sorts AFTER 'Z' (U+005A) — code-unit
+// order, not locale collation order (where Ö often sorts near O in German locale).
+
+describe("cleanScopedNodesToScreenIr — screen ordering is code-unit stable (Fix #3)", () => {
+  it("orders screens by code-unit (Ö after Z, not near O as German locale would)", () => {
+    // 'Z' = U+005A, 'Ö' = U+00D6 — code-unit order puts Z before Ö.
+    // A locale-sensitive sort (German) may place Ö near O (before Z).
+    const result = cleanScopedNodesToScreenIr(
+      canvas("0:1", [
+        screenFrame("Öresund", "ÖresundScreen", [text("t1", "a")]),
+        screenFrame("Zilla", "ZillaScreen", [text("t2", "b")]),
+        screenFrame("Alpha", "AlphaScreen", [text("t3", "c")]),
+      ]),
+    );
+    const ids = result.screens.map((s) => s.id);
+    // Code-unit sort: 'A' (65) < 'Z' (90) < 'Ö' (214)
+    expect(ids).toEqual(["Alpha", "Zilla", "Öresund"]);
+  });
+});
+
+// ─── Fix #4: deep-chain stack-overflow regression ────────────────────────────
+// 5000-deep node chains must degrade gracefully (truncate) instead of throwing RangeError.
+
+describe("cleanScopedNodesToScreenIr — 5000-deep chain degrades, no RangeError (Fix #4)", () => {
+  // Build a deeply nested Figma node chain (iteratively, not recursively).
+  const deepChain = (depth: number): FigmaSourceNode => {
+    let node: FigmaSourceNode = text("leaf", "leaf text");
+    for (let i = depth; i >= 1; i -= 1) {
+      const si = String(i);
+      node = frame(`deep-${si}`, `Frame${si}`, [node]);
+    }
+    return node;
+  };
+
+  // Measure actual IR tree depth iteratively (avoids any recursion risk in the test helper itself).
+  const irDepth = (root: IrNode): number => {
+    let depth = 0;
+    let current: IrNode = root;
+    while (current.children.length > 0) {
+      const next = current.children[0];
+      if (next === undefined) break;
+      current = next;
+      depth += 1;
+    }
+    return depth;
+  };
+
+  it("does not throw RangeError for a 5000-deep chain", () => {
+    expect(() =>
+      cleanScopedNodesToScreenIr(
+        canvas("0:1", [screenFrame("1:1", "DeepScreen", [deepChain(5000)])]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("produces a non-empty screen IR from a 5000-deep chain (truncation surfaced)", () => {
+    const result = cleanScopedNodesToScreenIr(
+      canvas("0:1", [screenFrame("1:1", "DeepScreen", [deepChain(5000)])]),
+    );
+    expect(result.screens).toHaveLength(1);
+    const root = result.screens[0]?.root;
+    expect(root).toBeDefined();
+    // Truncation is surfaced: the emitted IR tree depth is bounded well below 5000.
+    // MAX_TREE_DEPTH=512 means the deepest kept level is ≤ 512 from the screenFrame root.
+    if (root !== undefined) {
+      expect(irDepth(root)).toBeLessThan(600);
+      expect(irDepth(root)).toBeGreaterThan(0);
+    }
+    // The reduction report confirms more input nodes were counted than survived into the IR.
+    expect(result.reduction.inputNodeCount).toBeGreaterThan(result.reduction.keptNodeCount);
+  });
+});
+
+// ─── Layout / sizing / cornerRadius / typography fields on the IR node ────────────────
+
+describe("cleanScopedNodesToScreenIr — layout/sizing/cornerRadius/typography projection", () => {
+  const findById = (node: IrNode | undefined, id: string): IrNode | undefined => {
+    if (node === undefined) return undefined;
+    if (node.id === id) return node;
+    for (const child of node.children) {
+      const hit = findById(child, id);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  };
+
+  it("projects HORIZONTAL layoutMode to layout.mode row with gap and padding", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "HORIZONTAL",
+      itemSpacing: 8,
+      paddingTop: 4,
+      paddingRight: 8,
+      paddingBottom: 4,
+      paddingLeft: 8,
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = findById(result.screens[0]?.root, "1:1");
+
+    expect(root?.layout?.mode).toBe("row");
+    expect(root?.layout?.itemSpacing).toBe(8);
+    expect(root?.layout?.padding).toEqual([4, 8, 4, 8]);
+  });
+
+  it("projects VERTICAL layoutMode to layout.mode column", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "VERTICAL",
+      itemSpacing: 12,
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = findById(result.screens[0]?.root, "1:1");
+
+    expect(root?.layout?.mode).toBe("column");
+    expect(root?.layout?.itemSpacing).toBe(12);
+  });
+
+  it("projects primaryAxisAlignItems and counterAxisAlignItems to layout", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "HORIZONTAL",
+      primaryAxisAlignItems: "CENTER",
+      counterAxisAlignItems: "MIN",
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = findById(result.screens[0]?.root, "1:1");
+
+    expect(root?.layout?.primaryAlign).toBe("center");
+    expect(root?.layout?.counterAlign).toBe("start");
+  });
+
+  it("omits layout when layoutMode is absent", () => {
+    const result = cleanScopedNodesToScreenIr(
+      canvas("0:1", [screenFrame("1:1", "S", [text("1:2", "x")])]),
+    );
+    const root = result.screens[0]?.root;
+
+    expect(root?.layout).toBeUndefined();
+  });
+
+  it("omits layout.padding when all padding values are zero or absent", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "HORIZONTAL",
+      paddingTop: 0,
+      paddingLeft: 0,
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = findById(result.screens[0]?.root, "1:1");
+
+    expect(root?.layout?.padding).toBeUndefined();
+  });
+
+  it("projects layoutSizingHorizontal FILL and FIXED to sizing", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "HORIZONTAL",
+      layoutSizingHorizontal: "FILL",
+      layoutSizingVertical: "FIXED",
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = findById(result.screens[0]?.root, "1:1");
+
+    expect(root?.sizing?.horizontal).toBe("fill");
+    expect(root?.sizing?.vertical).toBe("fixed");
+  });
+
+  it("omits sizing when neither axis has a sizing value", () => {
+    const result = cleanScopedNodesToScreenIr(
+      canvas("0:1", [screenFrame("1:1", "S", [text("1:2", "x")])]),
+    );
+    expect(result.screens[0]?.root.sizing).toBeUndefined();
+  });
+
+  it("projects cornerRadius when positive", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], { cornerRadius: 8 });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+
+    expect(result.screens[0]?.root.cornerRadius).toBe(8);
+  });
+
+  it("omits cornerRadius when zero", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], { cornerRadius: 0 });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+
+    expect(result.screens[0]?.root.cornerRadius).toBeUndefined();
+  });
+
+  it("omits cornerRadius when absent", () => {
+    const result = cleanScopedNodesToScreenIr(
+      canvas("0:1", [screenFrame("1:1", "S", [text("1:2", "x")])]),
+    );
+    expect(result.screens[0]?.root.cornerRadius).toBeUndefined();
+  });
+
+  it("projects per-TEXT typography (fontFamily/fontSize/fontWeight)", () => {
+    const t = text("1:2", "Hello", { fontFamily: "Roboto", fontSize: 14, fontWeight: 700 });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screenFrame("1:1", "S", [t])]));
+    const textNode = findById(result.screens[0]?.root, "1:2");
+
+    expect(textNode?.typography).toEqual({ fontFamily: "Roboto", fontSize: 14, fontWeight: 700 });
+  });
+
+  it("omits typography for non-TEXT nodes", () => {
+    const rect: FigmaSourceNode = {
+      id: "1:2",
+      name: "Box",
+      type: "RECTANGLE",
+      absoluteBoundingBox: bbox(0, 0, 10, 10),
+      fills: [solidFill(0, 0, 0)],
+    };
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screenFrame("1:1", "S", [rect])]));
+    const rectNode = findById(result.screens[0]?.root, "1:2");
+
+    expect(rectNode?.typography).toBeUndefined();
+  });
+
+  it("omits typography when the style block is absent from a TEXT node", () => {
+    const t: FigmaSourceNode = {
+      id: "1:2",
+      name: "label",
+      type: "TEXT",
+      characters: "label",
+      absoluteBoundingBox: bbox(0, 0, 100, 20),
+    };
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screenFrame("1:1", "S", [t])]));
+    const textNode = findById(result.screens[0]?.root, "1:2");
+
+    expect(textNode?.typography).toBeUndefined();
+  });
+
+  it("clamps absurd (negative/NaN) numeric values to absent", () => {
+    const screen = screenFrame("1:1", "S", [text("1:2", "x")], {
+      layoutMode: "HORIZONTAL",
+      itemSpacing: -5,
+      cornerRadius: -1,
+    });
+    const result = cleanScopedNodesToScreenIr(canvas("0:1", [screen]));
+    const root = result.screens[0]?.root;
+
+    // Negative itemSpacing → omitted (treated as absent).
+    expect(root?.layout?.itemSpacing).toBeUndefined();
+    // Negative cornerRadius → omitted.
+    expect(root?.cornerRadius).toBeUndefined();
   });
 });

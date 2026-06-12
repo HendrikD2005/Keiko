@@ -97,33 +97,107 @@ function parseImageFills(value: unknown): IrNode["imageFills"] {
   return refs;
 }
 
+// Subtrees deeper than this are truncated during parse so a chain-like persisted irJson cannot cause
+// a RangeError. Shared constant — see prune.ts for rationale. Must stay in sync with every walk.
+const MAX_TREE_DEPTH = 512;
+
 // Parse a node's children list, dropping any malformed child rather than failing the whole node.
-function parseIrChildren(value: unknown): IrNode[] {
+// depth tracks how deep we are so the recursion is bounded at MAX_TREE_DEPTH.
+function parseIrChildren(value: unknown, depth: number): IrNode[] {
+  if (depth > MAX_TREE_DEPTH) return [];
   if (!Array.isArray(value)) return [];
   const children: IrNode[] = [];
   for (const child of value) {
-    const parsed = parseIrNode(child);
+    const parsed = parseIrNodeAt(child, depth);
     if (parsed !== undefined) children.push(parsed);
   }
   return children;
 }
 
-// The optional, additive node fields (text, bounding box, a11y colours #812). Each is present only
-// when well-typed; a malformed value is dropped so a corrupt node degrades rather than crashing.
+// The optional, additive node fields (text, bounding box, a11y colours #812, layout fidelity).
+// Each is present only when well-typed; a malformed value is dropped so a corrupt node degrades
+// rather than crashing.
 function parseOptionalNodeFields(value: Record<string, unknown>): Partial<IrNode> {
   const boundingBox = parseBoundingBox(value.boundingBox);
+  const layout = parseIrLayout(value.layout);
+  const sizing = parseIrSizing(value.sizing);
+  const typography = parseIrTypography(value.typography);
+  const cornerRadius = isFiniteNumber(value.cornerRadius) ? value.cornerRadius : undefined;
   return {
     ...(isString(value.text) ? { text: value.text } : {}),
     ...(boundingBox !== undefined ? { boundingBox } : {}),
     ...(isString(value.textColor) ? { textColor: value.textColor } : {}),
     ...(isString(value.backgroundColor) ? { backgroundColor: value.backgroundColor } : {}),
+    ...(layout !== undefined ? { layout } : {}),
+    ...(sizing !== undefined ? { sizing } : {}),
+    ...(cornerRadius !== undefined ? { cornerRadius } : {}),
+    ...(typography !== undefined ? { typography } : {}),
   };
+}
+
+const LAYOUT_MODES = new Set(["row", "column"]);
+const ALIGN_VALUES = new Set(["start", "center", "end", "space-between"]);
+const SIZING_VALUES = new Set(["fixed", "hug", "fill"]);
+
+type IrAlign = NonNullable<NonNullable<IrNode["layout"]>["primaryAlign"]>;
+
+const parseAlign = (value: unknown): IrAlign | undefined =>
+  isString(value) && ALIGN_VALUES.has(value) ? (value as IrAlign) : undefined;
+
+// Re-hydrate the layout-fidelity fields persisted in irJson (codegen path). Persisted snapshots
+// from before these fields existed simply omit them — every branch is total and optional.
+function parseIrLayout(value: unknown): IrNode["layout"] | undefined {
+  if (!isObject(value) || !isString(value.mode) || !LAYOUT_MODES.has(value.mode)) return undefined;
+  const padding = parsePadding(value.padding);
+  const itemSpacing = isFiniteNumber(value.itemSpacing) ? value.itemSpacing : undefined;
+  const primaryAlign = parseAlign(value.primaryAlign);
+  const counterAlign = parseAlign(value.counterAlign);
+  return {
+    mode: value.mode as NonNullable<IrNode["layout"]>["mode"],
+    ...(itemSpacing !== undefined ? { itemSpacing } : {}),
+    ...(padding !== undefined ? { padding } : {}),
+    ...(primaryAlign !== undefined ? { primaryAlign } : {}),
+    ...(counterAlign !== undefined ? { counterAlign } : {}),
+  };
+}
+
+function parsePadding(value: unknown): readonly [number, number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 4) return undefined;
+  return value.every(isFiniteNumber)
+    ? (value as unknown as readonly [number, number, number, number])
+    : undefined;
+}
+
+type IrSizingValue = NonNullable<NonNullable<IrNode["sizing"]>["horizontal"]>;
+
+const parseSizingValue = (value: unknown): IrSizingValue | undefined =>
+  isString(value) && SIZING_VALUES.has(value) ? (value as IrSizingValue) : undefined;
+
+function parseIrSizing(value: unknown): IrNode["sizing"] | undefined {
+  if (!isObject(value)) return undefined;
+  const horizontal = parseSizingValue(value.horizontal);
+  const vertical = parseSizingValue(value.vertical);
+  if (horizontal === undefined && vertical === undefined) return undefined;
+  return {
+    ...(horizontal !== undefined ? { horizontal } : {}),
+    ...(vertical !== undefined ? { vertical } : {}),
+  };
+}
+
+function parseIrTypography(value: unknown): IrNode["typography"] | undefined {
+  if (!isObject(value)) return undefined;
+  const { fontFamily, fontSize, fontWeight } = value;
+  if (!isString(fontFamily) || !isFiniteNumber(fontSize) || !isFiniteNumber(fontWeight)) {
+    return undefined;
+  }
+  return { fontFamily, fontSize, fontWeight };
 }
 
 // Total, defensive IR-node parser: an opaque serialised node (from the snapshot's `irJson`) is
 // accepted only when its required structural fields are present and well-typed; anything malformed
 // yields `undefined` so a corrupt screen degrades to "no items" rather than crashing the run.
-function parseIrNode(value: unknown): IrNode | undefined {
+// depth is passed through parseIrChildren to bound total recursion at MAX_TREE_DEPTH.
+function parseIrNodeAt(value: unknown, depth: number): IrNode | undefined {
   if (!isObject(value)) return undefined;
   const { id, name, type, interactionHint } = value;
   if (!isString(id) || !isString(name) || !isString(type)) return undefined;
@@ -135,8 +209,12 @@ function parseIrNode(value: unknown): IrNode | undefined {
     interactionHint: interactionHint as IrNode["interactionHint"],
     ...parseOptionalNodeFields(value),
     imageFills: parseImageFills(value.imageFills),
-    children: parseIrChildren(value.children),
+    children: parseIrChildren(value.children, depth + 1),
   };
+}
+
+function parseIrNode(value: unknown): IrNode | undefined {
+  return parseIrNodeAt(value, 0);
 }
 
 /**
@@ -226,14 +304,24 @@ function stateItem(node: IrNode, ctx: DerivationContext, label: string): Structu
   };
 }
 
-function collectNodeItems(node: IrNode, ctx: DerivationContext, out: StructuralTestItem[]): void {
+function collectNodeItemsAt(
+  node: IrNode,
+  ctx: DerivationContext,
+  out: StructuralTestItem[],
+  depth: number,
+): void {
+  if (depth > MAX_TREE_DEPTH) return;
   if (node.interactionHint === "input") out.push(...fieldItems(node, ctx));
   if (node.interactionHint === "button" || node.interactionHint === "link") {
     out.push(...controlItems(node, ctx));
   }
   const state = stateLabel(node.name);
   if (state !== undefined) out.push(stateItem(node, ctx, state));
-  for (const child of node.children) collectNodeItems(child, ctx, out);
+  for (const child of node.children) collectNodeItemsAt(child, ctx, out, depth + 1);
+}
+
+function collectNodeItems(node: IrNode, ctx: DerivationContext, out: StructuralTestItem[]): void {
+  collectNodeItemsAt(node, ctx, out, 0);
 }
 
 function screenRenderItem(ctx: DerivationContext): StructuralTestItem {
@@ -271,7 +359,10 @@ export function deriveScreenTestBaseline(
  */
 export function renderBaselineText(baseline: ScreenTestBaseline): string {
   const header = `Screen: ${baseline.screenName} [${baseline.screenId}]`;
-  const lines = baseline.items.map((item) => `- (${item.category}) ${item.title}`);
+  const lines = baseline.items.map((item) => {
+    const nodeRef = item.sourceNodeId !== undefined ? ` [node:${item.sourceNodeId}]` : "";
+    return `- (${item.category}) ${item.title}${nodeRef}`;
+  });
   return [
     header,
     "Structural test baseline (deterministic, derived from Screen-IR):",
