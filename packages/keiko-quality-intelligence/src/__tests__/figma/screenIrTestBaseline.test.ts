@@ -329,4 +329,139 @@ describe("renderBaselineText", () => {
     expect(text).toContain("(control-action)");
     expect(text).toContain("Pay");
   });
+
+  // Fix #6: traceability — sourceNodeId must appear in rendered text so the
+  // generated test case is attributable to its origin node.
+  it("appends [node:<sourceNodeId>] for items that have a sourceNodeId (Fix #6)", () => {
+    const ir = screen(
+      "s9",
+      "Profile",
+      node("root", "container", {
+        children: [node("save-btn", "button", { text: "Save" })],
+      }),
+    );
+    const text = renderBaselineText(deriveScreenTestBaseline(ir));
+    // control-action item for "save-btn" must carry [node:save-btn]
+    expect(text).toContain("[node:save-btn]");
+    // screen-render item has no sourceNodeId → no [node:...] suffix on that line
+    const screenRenderLine = text.split("\n").find((l) => l.includes("(screen-render)"));
+    expect(screenRenderLine).toBeDefined();
+    expect(screenRenderLine).not.toContain("[node:");
+  });
+});
+
+// ─── Fix #4: deep-chain parseIrNode RangeError regression ───────────────────
+// parseScreenIr on a 5000-deep irJson chain must not throw.
+
+describe("parseScreenIr — 5000-deep irJson chain degrades, no RangeError (Fix #4)", () => {
+  // Build a deeply nested irJson object. Each level is a valid serialised IrNode.
+  const deepIrJson = (depth: number): Record<string, unknown> => {
+    let inner: Record<string, unknown> = {
+      id: "leaf",
+      name: "leaf",
+      type: "FRAME",
+      interactionHint: "container",
+      imageFills: [],
+      children: [],
+    };
+    for (let i = depth; i >= 1; i -= 1) {
+      const si = String(i);
+      inner = {
+        id: `n${si}`,
+        name: `n${si}`,
+        type: "FRAME",
+        interactionHint: "container",
+        imageFills: [],
+        children: [inner],
+      };
+    }
+    return { id: "screen-deep", name: "DeepScreen", root: inner };
+  };
+
+  it("does not throw RangeError for a 5000-deep irJson chain", () => {
+    expect(() => parseScreenIr(deepIrJson(5000))).not.toThrow();
+  });
+
+  it("returns a defined ScreenIr (not undefined) from a deep chain", () => {
+    const result = parseScreenIr(deepIrJson(5000));
+    expect(result).toBeDefined();
+    expect(result?.id).toBe("screen-deep");
+    expect(result?.root).toBeDefined();
+  });
+});
+
+// ─── Layout-fidelity fields survive the persisted-irJson round trip ──────────
+//
+// The codegen route re-hydrates IrNode from the snapshot's opaque irJson via parseScreenIr. A
+// live integration pass caught these fields being DROPPED on parse (the in-memory emitCode tests
+// were blind to it), which silently disabled the per-screen <style> block on stored snapshots.
+
+describe("parseScreenIr — layout/sizing/cornerRadius/typography round trip", () => {
+  it("re-hydrates the layout-fidelity fields from persisted irJson", () => {
+    const json = JSON.parse(
+      JSON.stringify({
+        id: "s1",
+        name: "Login",
+        root: {
+          id: "s1-root",
+          name: "Root",
+          type: "FRAME",
+          interactionHint: "container",
+          layout: { mode: "column", itemSpacing: 12, padding: [16, 16, 16, 16] },
+          sizing: { horizontal: "fill" },
+          cornerRadius: 8,
+          imageFills: [],
+          children: [
+            {
+              id: "s1-t",
+              name: "Titel",
+              type: "TEXT",
+              interactionHint: "text",
+              text: "Hallo",
+              typography: { fontFamily: "Inter", fontSize: 16, fontWeight: 400 },
+              imageFills: [],
+              children: [],
+            },
+          ],
+        },
+      }),
+    ) as unknown;
+    const parsed = parseScreenIr(json);
+    expect(parsed?.root.layout).toEqual({
+      mode: "column",
+      itemSpacing: 12,
+      padding: [16, 16, 16, 16],
+    });
+    expect(parsed?.root.sizing).toEqual({ horizontal: "fill" });
+    expect(parsed?.root.cornerRadius).toBe(8);
+    expect(parsed?.root.children[0]?.typography).toEqual({
+      fontFamily: "Inter",
+      fontSize: 16,
+      fontWeight: 400,
+    });
+  });
+
+  it("drops malformed layout-fidelity values instead of failing the node", () => {
+    const json = {
+      id: "s1",
+      name: "X",
+      root: {
+        id: "r",
+        name: "r",
+        type: "FRAME",
+        interactionHint: "container",
+        layout: { mode: "diagonal" },
+        sizing: { horizontal: "stretch" },
+        cornerRadius: Number.NaN,
+        typography: { fontFamily: 7 },
+        imageFills: [],
+        children: [],
+      },
+    } as unknown;
+    const parsed = parseScreenIr(json);
+    expect(parsed?.root.layout).toBeUndefined();
+    expect(parsed?.root.sizing).toBeUndefined();
+    expect(parsed?.root.cornerRadius).toBeUndefined();
+    expect(parsed?.root.typography).toBeUndefined();
+  });
 });
