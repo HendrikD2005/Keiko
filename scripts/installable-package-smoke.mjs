@@ -38,8 +38,15 @@ function fail(message) {
   process.exit(1);
 }
 
-function run(cmd, args, options) {
-  const result = spawnSync(cmd, args, { encoding: "utf8", ...options });
+function run(cmd, args, options = {}) {
+  // `npm` resolves to `npm.cmd` on Windows, which modern Node refuses to spawn without a shell
+  // (CVE-2024-27980 hardening); route npm — and only npm — through the shell so the packaged-artifact
+  // smoke is cross-platform (the #284 OS matrix surfaced this). `node` is a real executable and is
+  // spawned directly (no shell) so absolute bin paths never pass through shell word-splitting. The
+  // npm arguments are tool-internal literals plus a tarball path under a controlled directory — no
+  // untrusted shell input. POSIX is unaffected: the shell runs the same `npm …` invocation.
+  const needsShell = cmd === "npm";
+  const result = spawnSync(cmd, args, { encoding: "utf8", shell: needsShell, ...options });
   if (result.error) {
     fail(`${cmd} ${args.join(" ")} could not spawn: ${result.error.message}`);
   }
@@ -134,7 +141,19 @@ function collectConsumerVisibleTypeExports(specifier, fromDirectory) {
 }
 
 function packRoot() {
-  const result = run("npm", ["pack", "--silent"], { cwd: repoRoot });
+  // The default pack runs the full `prepack` chain (clean + build + every release gate). The
+  // cross-platform runtime smoke (#284 AC4) sets KEIKO_SMOKE_PACK_IGNORE_SCRIPTS=1 to pack the
+  // ALREADY-BUILT dist (assembled by the job's explicit build / prepare:bin / build:ui steps)
+  // WITHOUT re-running that chain: the prepack gates (arch-check, package-surface, supply-chain)
+  // are the Linux publish gate — they run on the gating `build-scan-sbom-smoke` job and several
+  // shell out to `npx`/`npm` in ways that are not Windows-portable, which is a separate concern from
+  // verifying that the PACKED ARTIFACT runs cross-platform. On Linux the gate keeps the full
+  // prepack pack (flag unset), so its coverage is unchanged.
+  const packArgs =
+    process.env.KEIKO_SMOKE_PACK_IGNORE_SCRIPTS === "1"
+      ? ["pack", "--silent", "--ignore-scripts"]
+      : ["pack", "--silent"];
+  const result = run("npm", packArgs, { cwd: repoRoot });
   if (result.status !== 0) {
     fail(`npm pack exited ${String(result.status)}: ${result.stderr}`);
   }
@@ -301,6 +320,25 @@ async function stopChild(child) {
   ]);
 }
 
+async function assertQiRouteReachable(baseUrl) {
+  // Issue #284 AC4: prove the Quality Intelligence BFF seam is reachable on the PACKED artifact and
+  // that its evidence-directory path resolves cross-platform. This GET drives the QI local store's
+  // directory resolution (resolveEvidenceDir -> existingQiBaseDir) without requiring a model, so it
+  // is deterministic and offline — exactly the path handling most likely to break on Windows. A QI
+  // run / evidence WRITE is model-gated (Model Gateway) and out of an offline smoke; the read seam
+  // is what this asserts cross-platform.
+  const res = await globalThis.fetch(`${baseUrl}/api/quality-intelligence/runs`);
+  if (!res.ok) {
+    fail(`keiko ui GET /api/quality-intelligence/runs exited with HTTP ${String(res.status)}`);
+  }
+  const payload = await res.json();
+  if (!Array.isArray(payload.runs)) {
+    fail(
+      `keiko ui QI runs response did not contain runs[]: ${JSON.stringify(payload).slice(0, 200)}`,
+    );
+  }
+}
+
 async function assertUiLaunchProject(baseUrl, tmp) {
   const expectedProjectPath = realpathSync(tmp);
   const projectsRes = await globalThis.fetch(`${baseUrl}/api/projects`);
@@ -344,6 +382,7 @@ async function assertPackagedUi(tmp) {
   try {
     await waitForHealth(baseUrl, child, stdoutChunks, stderrChunks);
     await assertUiLaunchProject(baseUrl, tmp);
+    await assertQiRouteReachable(baseUrl);
     const home = await globalThis.fetch(`${baseUrl}/`);
     if (!home.ok) {
       fail(`keiko ui GET / exited with HTTP ${String(home.status)}`);
