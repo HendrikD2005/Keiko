@@ -1288,7 +1288,7 @@ describe("PATCH /api/chats", () => {
   it("persists and round-trips a connectedScopes list allowed by a raised maxConnectedSources", async () => {
     const raisedCapConfig = {
       ...customModelConfig(CHAT_MODEL),
-      grounding: { maxConnectedSources: 17 },
+      grounding: { ...DEFAULT_GROUNDING_LIMITS, maxConnectedSources: 17 },
     };
     await restartWithDeps({ config: raisedCapConfig });
 

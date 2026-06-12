@@ -49,6 +49,7 @@ import {
   requestOpenAIEmbedding,
   verifyEmbeddingCapability,
   type GatewayConfig,
+  type GatewayOpenAiCompatibleProviderConfig,
   type ModelProviderConfig,
   type OpenAIEmbeddingAdapter,
   type OpenAIEmbeddingOutcome,
@@ -296,7 +297,7 @@ function isConfiguredEmbeddingModel(config: EmbeddingSelectionConfig, modelId: s
 function configuredEmbeddingProvider(
   config: GatewayConfig | undefined,
   modelId: string,
-): ModelProviderConfig | undefined {
+): GatewayOpenAiCompatibleProviderConfig | undefined {
   if (config === undefined) return undefined;
   const provider = config.providers.find((entry) => entry.modelId === modelId);
   if (provider === undefined) return undefined;
@@ -307,7 +308,7 @@ function configuredEmbeddingProvider(
 function configuredProviderForCapsule(
   deps: UiHandlerDeps,
   capsule: KnowledgeCapsule,
-): ModelProviderConfig | undefined {
+): GatewayOpenAiCompatibleProviderConfig | undefined {
   const provider = configuredEmbeddingProvider(
     currentGatewayConfig(deps),
     capsule.embeddingModelIdentity.modelId,
@@ -664,14 +665,9 @@ function buildCapsuleHealth(
 }
 
 function createEmbeddingAdapter(
-  provider: ModelProviderConfig,
+  provider: GatewayOpenAiCompatibleProviderConfig,
   requestImpl: (request: OpenAIEmbeddingRequest) => Promise<OpenAIEmbeddingOutcome>,
 ): OpenAIEmbeddingAdapter {
-  if (!isGatewayOpenAiCompatibleProviderConfig(provider)) {
-    throw new Error(
-      `embedding adapter requires a gateway-openai-compatible provider for '${provider.modelId}'`,
-    );
-  }
   return {
     endpoint: provider.baseUrl,
     apiKey: provider.apiKey,
@@ -846,13 +842,13 @@ function normalizedEndpointFingerprint(baseUrl: string): string {
   return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 }
 
-function embeddingProviderIdentity(provider: ModelProviderConfig): string {
+function embeddingProviderIdentity(provider: GatewayOpenAiCompatibleProviderConfig): string {
   return `openai-compatible:${normalizedEndpointFingerprint(provider.baseUrl)}`;
 }
 
 function storedProviderMatchesConfiguredProvider(
   storedProvider: string,
-  provider: ModelProviderConfig,
+  provider: GatewayOpenAiCompatibleProviderConfig,
 ): boolean {
   // Legacy capsules created before #192 audit fixes stored the generic "openai" label.
   // Keep those usable; new capsules store a non-secret endpoint fingerprint so future
@@ -877,7 +873,7 @@ function createCapsuleStorageReference(capsuleId: string): string {
 
 async function verifiedNewCapsuleEmbeddingIdentity(
   deps: UiHandlerDeps,
-  provider: ModelProviderConfig,
+  provider: GatewayOpenAiCompatibleProviderConfig,
 ): Promise<
   | { readonly ok: true; readonly identity: KnowledgeCapsule["embeddingModelIdentity"] }
   | { readonly ok: false; readonly result: RouteResult }

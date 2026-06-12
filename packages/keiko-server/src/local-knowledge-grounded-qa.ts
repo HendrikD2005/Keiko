@@ -170,6 +170,9 @@ export function createEmbeddingAdapter(
     if (provider === undefined) {
       return conflict(`No configured embedding provider matches local knowledge model ${modelId}.`);
     }
+    if (!isGatewayOpenAiCompatibleProviderConfig(provider)) {
+      return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
+    }
     if (!isConfiguredEmbeddingModel(config, provider.modelId)) {
       return conflict(`Configured local knowledge model ${modelId} cannot serve embeddings.`);
     }
