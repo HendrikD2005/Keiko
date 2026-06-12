@@ -34,9 +34,36 @@ import type {
   ModelCallFailedEvent,
   ModelCallStartedEvent,
   ModelPort,
+  OrchestrationAuthorityBoundary,
+  OrchestrationChildOutcome,
+  OrchestrationChildRequest,
+  OrchestrationChildResult,
+  OrchestrationChildPlan,
+  OrchestrationChildRole,
+  OrchestrationChildSettlement,
+  OrchestrationConfig,
+  OrchestrationDeps,
+  OrchestrationExecutionMode,
+  OrchestrationInvalidTransition,
+  OrchestrationLimits,
+  OrchestrationPlan,
+  OrchestrationRunIdentity,
+  OrchestrationRunKind,
+  OrchestrationSchedulerHooks,
+  OrchestrationSession,
+  OrchestrationSessionResult,
+  OrchestrationState,
+  OrchestrationStateTransition,
   PatchProposedEvent,
   ReasoningTraceEvent,
   RecordedToolCall,
+  ResourceAccessMode,
+  ResourceClaim,
+  ResourceConflict,
+  ResourceConflictPolicy,
+  ResourceKind,
+  SettlementPolicy,
+  RolePolicy,
   RunCancelledEvent,
   RunCompletedEvent,
   RunCounters,
@@ -70,11 +97,25 @@ describe("keiko-harness public surface", () => {
     expect(typeof harness.createSession).toBe("function");
     expect(typeof harness.runAgent).toBe("function");
     expect(harness.runAgent).toBe(harness.createSession);
+    expect(typeof harness.createOrchestrationSession).toBe("function");
     expect(typeof harness.HARNESS_VERSION).toBe("string");
     // Frozen tables (re-exported from keiko-contracts):
     expect(harness.DEFAULT_LIMITS).toBeDefined();
     expect(harness.HARNESS_CODES).toBeDefined();
     expect(harness.TERMINAL_STATES).toBeDefined();
+    expect(harness.ORCHESTRATION_SCHEMA_VERSION).toBe("1");
+    expect(harness.ORCHESTRATION_RUN_KINDS).toContain("child-run");
+    expect(harness.ORCHESTRATION_EXECUTION_MODES).toContain("parallel");
+    expect(harness.ORCHESTRATION_STATES).toContain("dispatching");
+    expect(harness.ORCHESTRATION_TERMINAL_STATES.has("failed")).toBe(true);
+    expect(harness.ORCHESTRATION_CHILD_ROLES).toContain("reviewer");
+    expect(harness.ORCHESTRATION_CHILD_OUTCOMES).toContain("discarded");
+    expect(harness.ORCHESTRATION_ALLOWED_STATE_TRANSITIONS.running).toContain("merging");
+    expect(typeof harness.isOrchestrationStateTransitionAllowed).toBe("function");
+    expect(typeof harness.assertOrchestrationStateTransition).toBe("function");
+    expect(harness.DEFAULT_ORCHESTRATION_LIMITS.maxConcurrentChildren).toBeGreaterThan(0);
+    expect(harness.DEFAULT_ROLE_POLICIES.implementer.allowsParallel).toBe(true);
+    expect(harness.DEFAULT_SETTLEMENT_POLICY.escalateOnConflicts).toBe(true);
     // Error taxonomy (re-exported from keiko-security):
     expect(typeof harness.HarnessError).toBe("function");
     expect(typeof harness.HarnessInternalError).toBe("function");
@@ -125,6 +166,26 @@ describe("keiko-harness public surface", () => {
     pin<ModelCallFailedEvent>();
     pin<ModelCallStartedEvent>();
     pin<ModelPort>();
+    pin<OrchestrationAuthorityBoundary>();
+    pin<OrchestrationChildOutcome>();
+    pin<OrchestrationChildRequest>();
+    pin<OrchestrationChildResult>();
+    pin<OrchestrationChildPlan>();
+    pin<OrchestrationChildRole>();
+    pin<OrchestrationChildSettlement>();
+    pin<OrchestrationConfig>();
+    pin<OrchestrationDeps>();
+    pin<OrchestrationExecutionMode>();
+    pin<OrchestrationInvalidTransition>();
+    pin<OrchestrationLimits>();
+    pin<OrchestrationPlan>();
+    pin<OrchestrationRunIdentity>();
+    pin<OrchestrationRunKind>();
+    pin<OrchestrationSchedulerHooks>();
+    pin<OrchestrationSession>();
+    pin<OrchestrationSessionResult>();
+    pin<OrchestrationState>();
+    pin<OrchestrationStateTransition>();
     pin<PatchProposedEvent>();
     pin<ReasoningTraceEvent>();
     pin<RecordedToolCall>();
@@ -150,5 +211,12 @@ describe("keiko-harness public surface", () => {
     pin<ToolCallStartedEvent>();
     pin<ToolPort>();
     pin<VerificationResultEvent>();
+    pin<ResourceAccessMode>();
+    pin<ResourceClaim>();
+    pin<ResourceConflict>();
+    pin<ResourceConflictPolicy>();
+    pin<ResourceKind>();
+    pin<SettlementPolicy>();
+    pin<RolePolicy>();
   });
 });
