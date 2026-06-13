@@ -458,3 +458,50 @@ describe("uiux-fix F013 — header responsive stages and tab truncation", () => 
     expect(css).not.toContain(".tb-newtab:focus-visible");
   });
 });
+
+// ─── Issue #1 — workspace zoom/pan CSS layer split ───────────────────────────
+//
+// Combining `zoom` and `will-change: transform` on the same element caused the
+// browser to rescale a cached GPU texture (blurry) instead of re-rasterising at
+// the new zoom level.  The fix splits the work across two elements:
+//   .ws-scene     — CSS zoom only, no will-change (forces re-rasterisation)
+//   .ws-scene-pan — translate only, with will-change: transform (GPU panning)
+
+describe("Issue #1 — workspace zoom/pan CSS layer split", () => {
+  it(".ws-scene rule exists in the stylesheet", () => {
+    expect(css).toContain(".ws-scene {");
+  });
+
+  it(".ws-scene does NOT carry will-change: transform as a property (only as a comment)", () => {
+    const sceneIdx = css.indexOf(".ws-scene {");
+    expect(sceneIdx).toBeGreaterThan(-1);
+    const block = css.slice(sceneIdx, css.indexOf("}", sceneIdx) + 1);
+    // Match the property declaration, not comment text
+    expect(block).not.toMatch(/^\s*will-change:\s*transform/m);
+  });
+
+  it(".ws-scene-pan rule exists in the stylesheet", () => {
+    expect(css).toContain(".ws-scene-pan {");
+  });
+
+  it(".ws-scene-pan carries will-change: transform", () => {
+    const panIdx = css.indexOf(".ws-scene-pan {");
+    expect(panIdx).toBeGreaterThan(-1);
+    const block = css.slice(panIdx, css.indexOf("}", panIdx) + 1);
+    expect(block).toMatch(/will-change:\s*transform/);
+  });
+
+  it(".ws-scene-pan uses position: relative", () => {
+    const panIdx = css.indexOf(".ws-scene-pan {");
+    expect(panIdx).toBeGreaterThan(-1);
+    const block = css.slice(panIdx, css.indexOf("}", panIdx) + 1);
+    expect(block).toMatch(/position:\s*relative/);
+  });
+
+  it(".ws-scene-pan appears after .ws-scene in the stylesheet", () => {
+    const sceneIdx = css.indexOf(".ws-scene {");
+    const panIdx = css.indexOf(".ws-scene-pan {");
+    expect(sceneIdx).toBeGreaterThan(-1);
+    expect(panIdx).toBeGreaterThan(sceneIdx);
+  });
+});

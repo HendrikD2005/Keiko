@@ -10,11 +10,16 @@
   color-scheme: dark;
 
   /* surfaces — warm-neutral near-black, derived in oklch from #333 */
-  --bg: oklch(0.17 0.004 160); /* app background */
-  --surface: oklch(0.205 0.004 160); /* sidebar / panels */
-  --card: oklch(0.235 0.004 160); /* raised cards */
-  --card-2: oklch(0.265 0.004 160); /* hover / nested */
-  --inset: oklch(0.155 0.004 160); /* wells, inputs */
+  --bg: oklch(0.17 0.004 160);
+  /* app background */
+  --surface: oklch(0.205 0.004 160);
+  /* sidebar / panels */
+  --card: oklch(0.235 0.004 160);
+  /* raised cards */
+  --card-2: oklch(0.265 0.004 160);
+  /* hover / nested */
+  --inset: oklch(0.155 0.004 160);
+  /* wells, inputs */
 
   /* borders */
   --line: oklch(0.3 0.004 160);
@@ -68,6 +73,7 @@
 * {
   box-sizing: border-box;
 }
+
 html,
 body {
   margin: 0;
@@ -82,9 +88,11 @@ body {
   text-rendering: auto;
   overflow: hidden;
 }
+
 #root {
   height: 100%;
 }
+
 button {
   font-family: inherit;
   color: inherit;
@@ -92,6 +100,7 @@ button {
   border: none;
   background: none;
 }
+
 ::selection {
   background: var(--accent-glow);
 }
@@ -101,15 +110,18 @@ button {
   width: 10px;
   height: 10px;
 }
+
 *::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
+
 *::-webkit-scrollbar-thumb:hover {
   background: var(--line-strong);
 }
+
 *::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -137,12 +149,15 @@ button {
   display: flex;
   align-items: center;
 }
+
 .spacer {
   flex: 1;
 }
+
 .mono {
   font-family: var(--font-mono);
 }
+
 .dot {
   width: 7px;
   height: 7px;
@@ -155,20 +170,25 @@ button {
     transform: rotate(360deg);
   }
 }
+
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.35;
   }
 }
+
 @keyframes fadeUp {
   from {
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -219,14 +239,17 @@ button {
   --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.7) inset, 0 6px 18px -12px rgba(20, 30, 25, 0.22);
   --shadow-pop: 0 18px 50px -18px rgba(20, 30, 25, 0.26), 0 0 0 1px var(--line);
 }
+
 [data-theme="light"] .dlg-overlay {
   background: oklch(0.3 0.01 160 / 0.34);
 }
+
 [data-theme="light"] .ws-fab,
 [data-theme="light"] .dlg-primary,
 [data-theme="light"] .cmp-send[data-on="true"] {
   color: var(--ink-inverse);
 }
+
 /* Accent/info/muted token text on near-white badge backgrounds fails 4.5:1 — use ink-inverse for AA. */
 [data-theme="light"] .qi-badge-succeeded,
 [data-theme="light"] .qi-badge-running,
@@ -246,6 +269,7 @@ button {
   align-items: center;
   padding: 16px 10px 6px;
 }
+
 .sb-section-label {
   font-size: 11px;
   font-weight: 600;
@@ -253,6 +277,7 @@ button {
   text-transform: uppercase;
   color: var(--fg-faint);
 }
+
 .proj-head {
   display: flex;
   align-items: center;
@@ -264,33 +289,41 @@ button {
   font-size: 13px;
   text-align: left;
 }
+
 .proj-head:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .proj-caret {
   display: grid;
   place-items: center;
   transition: transform 0.15s;
   color: var(--fg-faint);
 }
+
 .proj-caret[data-open="true"] {
   transform: rotate(90deg);
 }
+
 .proj-name {
   font-weight: 500;
 }
+
 .proj-chats {
   padding: 1px 0 4px;
 }
+
 .proj-empty {
   font-size: 12.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   padding: 5px 9px 5px 31px;
 }
 
 .chat-row {
-  position: relative; /* anchor for the active ::before indicator (uiux-fix F025) */
+  position: relative;
+  /* anchor for the active ::before indicator (uiux-fix F025) */
   display: flex;
   align-items: center;
   gap: 7px;
@@ -301,14 +334,17 @@ button {
   font-size: 13px;
   text-align: left;
 }
+
 .chat-row:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .chat-row[data-active="true"] {
   background: var(--card);
   color: var(--fg);
 }
+
 .chat-row[data-active="true"]::before {
   content: "";
   position: absolute;
@@ -320,22 +356,27 @@ button {
   /* accent bar distinguishes active from hover, analog .rail-btn (uiux-fix F025) */
   background: var(--accent);
 }
+
 .chat-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .chat-time {
   font-size: 11px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   font-family: var(--font-mono);
 }
+
 .chat-meta {
   color: var(--fg-faint);
   display: grid;
   place-items: center;
 }
+
 /* ---------- SHELL: HEADER / MID / FOOTER ---------- */
 .app {
   display: flex;
@@ -343,6 +384,7 @@ button {
   height: 100%;
   background: var(--surface);
 }
+
 .header {
   display: flex;
   align-items: center;
@@ -352,21 +394,25 @@ button {
   padding: 0 10px;
   background: var(--surface);
 }
+
 .hd-brand {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 6px 0 4px;
 }
+
 .hd-logo {
   width: 22px;
   height: 22px;
 }
+
 .hd-wordmark {
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
+
 .tb-btn {
   width: 30px;
   height: 30px;
@@ -375,19 +421,23 @@ button {
   border-radius: 8px;
   color: var(--fg-dim);
 }
+
 .tb-btn:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .tb-btn[data-on="true"] {
   color: var(--fg);
 }
+
 .tb-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   margin-left: 2px;
 }
+
 .tb-tab {
   display: flex;
   align-items: center;
@@ -398,11 +448,13 @@ button {
   color: var(--fg-muted);
   border: 1px solid transparent;
 }
+
 .tb-tab[data-active="true"] {
   background: var(--card);
   color: var(--fg);
   border-color: var(--line-soft);
 }
+
 /* .tb-newtab removed (uiux-fix F013 C059) — the "New tab" button had no handler
    and no tab model behind it; the dead control was dropped from Header.tsx. */
 .tb-status {
@@ -418,11 +470,13 @@ button {
   border-radius: 999px;
   white-space: nowrap;
 }
+
 .hd-tools {
   display: flex;
   align-items: center;
   gap: 3px;
 }
+
 .hd-tool {
   width: 32px;
   height: 30px;
@@ -431,10 +485,12 @@ button {
   border-radius: 8px;
   color: var(--fg-muted);
 }
+
 .hd-tool:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .hd-tool-cta {
   width: auto;
   gap: 6px;
@@ -447,10 +503,12 @@ button {
   background: var(--card);
   border: 1px solid var(--line);
 }
+
 .hd-tool-cta:hover {
   border-color: var(--accent-line);
   color: var(--fg);
 }
+
 .hd-div {
   width: 1px;
   height: 22px;
@@ -489,7 +547,7 @@ button {
     padding-inline: 9px;
   }
 
-  .tb-tab > span {
+  .tb-tab>span {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -508,7 +566,7 @@ button {
   }
 
   .hd-tools .hd-div,
-  .header > .hd-div {
+  .header>.hd-div {
     display: none;
   }
 
@@ -553,6 +611,7 @@ button {
   position: relative;
   display: flex;
 }
+
 .edm-trigger {
   display: flex;
   align-items: center;
@@ -563,35 +622,42 @@ button {
   border: 1px solid var(--line);
   background: var(--card);
 }
+
 .edm-trigger:hover {
   border-color: var(--line-strong);
 }
+
 .edm-trigger-label {
   white-space: nowrap;
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .ed-tile {
   display: inline-grid;
   place-items: center;
   flex: none;
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.22);
 }
+
 .ed-img {
   display: block;
   flex: none;
   object-fit: contain;
 }
+
 .ed-mark {
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.04em;
 }
+
 .edm-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9690;
 }
+
 .edm-menu {
   position: absolute;
   top: 38px;
@@ -600,15 +666,19 @@ button {
   width: 232px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius); /* was off-scale 13px (uiux-fix F037 C304) */
+  border-radius: var(--radius);
+  /* was off-scale 13px (uiux-fix F037 C304) */
   box-shadow: var(--shadow-pop);
   padding: 6px;
 }
+
 .edm-head {
   font-size: 10.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   padding: 6px 8px 8px;
 }
+
 .edm-item {
   display: flex;
   align-items: center;
@@ -620,13 +690,16 @@ button {
   font-size: 13.5px;
   color: var(--fg-muted);
 }
+
 .edm-item:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .edm-item[data-sel="true"] {
   color: var(--fg);
 }
+
 .edm-name {
   flex: 1;
 }
@@ -652,6 +725,7 @@ button {
      measured 4.17:1 on dark (FAIL). Override rules on child segments are unaffected. */
   color: var(--fg-muted);
 }
+
 .ft-seg {
   display: flex;
   align-items: center;
@@ -660,18 +734,22 @@ button {
   border-radius: 7px;
   white-space: nowrap;
 }
+
 .ft-seg svg {
   opacity: 0.8;
 }
+
 .ft-accent {
   /* uses --accent-text so light theme gets a darkened shade that meets WCAG 1.4.3 (≥4.5:1) */
   color: var(--accent-text);
 }
+
 .ft-window-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
+
 .ft-window-trigger {
   color: var(--accent-text);
   font: inherit;
@@ -679,14 +757,17 @@ button {
   background: transparent;
   cursor: pointer;
 }
+
 .ft-window-trigger:hover:not(:disabled),
 .ft-window-trigger[aria-expanded="true"] {
   background: var(--card-2);
 }
+
 .ft-window-trigger:disabled {
   cursor: default;
   opacity: 0.58;
 }
+
 .ft-window-palette {
   position: absolute;
   right: 0;
@@ -703,12 +784,14 @@ button {
   background: var(--surface);
   box-shadow: var(--shadow-pop);
 }
+
 .ft-window-palette-head {
   padding: 3px 5px 6px;
   color: var(--fg-muted);
   font-size: 11px;
   font-weight: 650;
 }
+
 .ft-window-list {
   display: flex;
   flex-direction: column;
@@ -716,6 +799,7 @@ button {
   min-height: 0;
   overflow: auto;
 }
+
 .ft-window-card {
   width: 100%;
   min-height: 54px;
@@ -732,15 +816,18 @@ button {
   font: inherit;
   cursor: pointer;
 }
+
 .ft-window-card:hover,
 .ft-window-card:focus-visible {
   background: var(--card-2);
   border-color: var(--line-soft);
 }
+
 .ft-window-card[data-minimized="true"] {
   color: var(--fg-muted);
   background: color-mix(in oklch, var(--accent) 6%, transparent);
 }
+
 .ft-window-icon {
   width: 28px;
   height: 28px;
@@ -750,12 +837,14 @@ button {
   background: var(--inset);
   color: var(--fg-muted);
 }
+
 .ft-window-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+
 .ft-window-title {
   min-width: 0;
   overflow: hidden;
@@ -765,6 +854,7 @@ button {
   font-size: 12px;
   font-weight: 650;
 }
+
 .ft-window-sub {
   min-width: 0;
   overflow: hidden;
@@ -773,6 +863,7 @@ button {
   color: var(--fg-muted);
   font-size: 11px;
 }
+
 .ft-window-state {
   align-self: center;
   padding: 2px 6px;
@@ -781,6 +872,7 @@ button {
   color: var(--fg-muted);
   font-size: 10.5px;
 }
+
 .ft-dim {
   color: var(--fg-faint);
 }
@@ -794,20 +886,35 @@ button {
   gap: 6px;
   padding: 6px;
 }
+
 .ws-scene {
   position: absolute;
   left: 0;
   top: 0;
   width: 0;
   height: 0;
-  will-change: transform;
+  /* No will-change here: combining zoom + will-change: transform on the same
+     element causes the browser to rescale a cached GPU texture (blurry) instead
+     of re-rasterising at the new zoom level. Zoom triggers a full layout pass
+     instead, which keeps all child content sharp. */
   z-index: 2;
 }
+
+/* Inner pan layer: only translate is applied here so will-change: transform
+   enables GPU compositing for smooth panning without affecting zoom clarity.
+   position: relative makes this element the containing block for absolutely-
+   positioned .window children. */
+.ws-scene-pan {
+  position: relative;
+  will-change: transform;
+}
+
 /* .workspace lives in the WORKSPACE SURFACE block below (duplicate top-level
    selector consolidated, uiux-fix F037 C330) */
 .workspace .window {
   cursor: default;
 }
+
 .ws-zoom {
   position: absolute;
   left: 14px;
@@ -823,6 +930,7 @@ button {
   border: 1px solid var(--line);
   box-shadow: var(--shadow-card);
 }
+
 .ws-zoom-btn {
   width: 30px;
   height: 28px;
@@ -831,10 +939,12 @@ button {
   border-radius: 11px;
   color: var(--fg-dim);
 }
+
 .ws-zoom-btn:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .ws-zoom-pct {
   min-width: 48px;
   height: 28px;
@@ -843,10 +953,12 @@ button {
   color: var(--fg-muted);
   border-radius: 8px;
 }
+
 .ws-zoom-pct:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .workspace {
   position: relative;
   flex: 1;
@@ -872,6 +984,7 @@ button {
   pointer-events: none;
   transition: opacity 0.35s ease;
 }
+
 /* Dot-grid — own layer (z1) above the wallpaper; pans/zooms with the view */
 .ws-grid {
   position: absolute;
@@ -892,6 +1005,7 @@ button {
   padding: 10px 0;
   gap: 5px;
 }
+
 .rail-new {
   width: 38px;
   height: 38px;
@@ -902,6 +1016,7 @@ button {
   border: 1px solid var(--accent-line);
   background: var(--accent-dim);
 }
+
 .rail-new:hover {
   /* token-based hover instead of filter: brightness(1.12) — the brightness lift
      was invisible on the light theme's near-white accent-dim tint and washed out
@@ -909,18 +1024,21 @@ button {
   background: var(--accent-glow);
   border-color: var(--accent);
 }
+
 .rail-div {
   width: 22px;
   height: 1px;
   background: var(--line-soft);
   margin: 6px 0 7px;
 }
+
 .rail-group {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
+
 .rail-btn {
   position: relative;
   width: 38px;
@@ -930,14 +1048,17 @@ button {
   border-radius: 10px;
   color: var(--fg-dim);
 }
+
 .rail-btn:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .rail-btn[data-active="true"] {
   background: var(--card);
   color: var(--accent-text);
 }
+
 .rail-btn[data-active="true"]::before {
   content: "";
   position: absolute;
@@ -946,16 +1067,19 @@ button {
   width: 3px;
   background: var(--accent);
 }
+
 .rail-btn[data-side="left"][data-active="true"]::before {
   /* -6px = button inset within the 50px rail; -8px clipped 2 of the 3px
      bar beyond the viewport edge (uiux-fix F037 C294) */
   left: -6px;
   border-radius: 0 3px 3px 0;
 }
+
 .rail-btn[data-side="right"][data-active="true"]::before {
   right: -6px;
   border-radius: 3px 0 0 3px;
 }
+
 .rail-avatar {
   width: 28px;
   height: 28px;
@@ -985,12 +1109,15 @@ button {
   flex-direction: column;
   overflow: hidden;
 }
+
 .tw-left {
   left: 10px;
 }
+
 .tw-right {
   right: 10px;
 }
+
 .tw-head {
   display: flex;
   align-items: center;
@@ -1000,31 +1127,38 @@ button {
   border-bottom: 1px solid var(--line-soft);
   flex: none;
 }
+
 .tw-ico {
   display: grid;
   place-items: center;
 }
+
 .tw-title {
   font-size: 13px;
   font-weight: 600;
 }
+
 .tw-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
+
 .tw-scroll {
   padding: 8px 6px;
 }
+
 .tw-pad {
   padding: 12px 13px;
 }
+
 .tw-list {
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+
 .tw-label {
   font-size: 11px;
   font-weight: 600;
@@ -1033,6 +1167,7 @@ button {
   color: var(--fg-faint);
   margin: 14px 4px 8px;
 }
+
 .srch-box {
   display: flex;
   align-items: center;
@@ -1043,6 +1178,7 @@ button {
   border: 1px solid var(--line-soft);
   color: var(--fg-faint);
 }
+
 .srch-box input {
   flex: 1;
   min-width: 0;
@@ -1060,27 +1196,33 @@ button {
   flex-direction: column;
   height: 100%;
 }
+
 .srch .srch-box {
   margin: 12px 12px 4px;
 }
+
 .srch-label {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 10px 12px 6px !important;
 }
+
 .srch-meta {
   font-size: 10px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
 }
+
 .tr {
   flex: 1;
   overflow: auto;
   padding: 2px 6px 8px;
 }
+
 .tr-row {
   display: flex;
   align-items: center;
@@ -1096,11 +1238,13 @@ button {
   color: var(--fg-muted);
   text-align: left;
 }
+
 .tr-dir-line {
   display: flex;
   align-items: stretch;
   width: 100%;
 }
+
 .tr-caret-btn {
   display: grid;
   flex: none;
@@ -1110,29 +1254,35 @@ button {
   border-radius: 7px;
   color: var(--fg-faint);
 }
+
 .tr-caret-btn:hover:not(:disabled) {
   background: var(--card-2);
   color: var(--fg-muted);
 }
+
 .tr-caret-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .tr-dir-enter {
   min-width: 0;
   flex: 1;
   width: auto;
 }
+
 .tr-row:hover:not(:disabled) {
   /* :not(:disabled) (uiux-fix F022 C202) — dead rows must not advertise a click;
      the aria-disabled pendant lives at the end of the file. */
   background: var(--card-2);
 }
+
 .tr-file[data-active="true"],
 .tr-dir-enter[data-active="true"] {
   background: var(--accent-dim);
   color: var(--fg);
 }
+
 .tr-caret {
   display: grid;
   place-items: center;
@@ -1140,25 +1290,30 @@ button {
   transition: transform 0.12s;
   flex: none;
 }
+
 .tr-caret[data-open="true"] {
   transform: rotate(90deg);
 }
+
 .fi-img {
   display: block;
   flex: none;
 }
+
 .fi-fallback {
   display: grid;
   place-items: center;
   color: var(--fg-dim);
   flex: none;
 }
+
 .tr-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .tr-folder {
   color: var(--fg);
   font-weight: 600;
@@ -1168,17 +1323,20 @@ button {
 .plg {
   padding: 8px 8px 12px;
 }
+
 .plg-sec {
   display: flex;
   align-items: baseline;
   gap: 8px;
   padding: 8px 8px 8px;
 }
+
 .plg-sec2 {
   margin-top: 8px;
   border-top: 1px solid var(--line-soft);
   padding-top: 14px;
 }
+
 .plg-sec-t {
   font-size: 11px;
   font-weight: 700;
@@ -1186,11 +1344,13 @@ button {
   text-transform: uppercase;
   color: var(--fg-dim);
 }
+
 .plg-sec-c {
   font-size: 10px;
   color: var(--accent-text);
   margin-left: auto;
 }
+
 .plg-row {
   display: flex;
   align-items: center;
@@ -1200,12 +1360,15 @@ button {
   border-radius: 10px;
   text-align: left;
 }
+
 .plg-row:hover {
   background: var(--card-2);
 }
+
 .plg-conn {
   border: 1px solid transparent;
 }
+
 .plg-ico {
   width: 34px;
   height: 34px;
@@ -1216,18 +1379,22 @@ button {
   display: grid;
   place-items: center;
 }
+
 .pl-img {
   display: block;
 }
+
 .pl-line {
   color: var(--accent);
   display: grid;
   place-items: center;
 }
+
 .pl-glyph {
   color: var(--fg-muted);
   font-size: 14px;
 }
+
 .plg-text {
   flex: 1;
   display: flex;
@@ -1235,15 +1402,19 @@ button {
   gap: 1px;
   min-width: 0;
 }
+
 .plg-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--fg);
 }
+
 .plg-desc {
   font-size: 11px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
 }
+
 .plg-dot {
   width: 8px;
   height: 8px;
@@ -1251,10 +1422,12 @@ button {
   flex: none;
   background: var(--line-strong);
 }
+
 .plg-dot.on {
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 .auto-row {
   display: flex;
   align-items: center;
@@ -1262,9 +1435,11 @@ button {
   padding: 9px 10px;
   border-radius: 9px;
 }
+
 .auto-row:hover {
   background: var(--card-2);
 }
+
 .auto-text {
   flex: 1;
   display: flex;
@@ -1272,14 +1447,18 @@ button {
   gap: 1px;
   min-width: 0;
 }
+
 .auto-name {
   font-size: 13px;
   color: var(--fg);
 }
+
 .auto-when {
   font-size: 11px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
 }
+
 .auto-toggle {
   width: 30px;
   height: 18px;
@@ -1289,6 +1468,7 @@ button {
   position: relative;
   flex: none;
 }
+
 .auto-toggle span {
   position: absolute;
   top: 2px;
@@ -1301,17 +1481,21 @@ button {
     left 0.15s,
     background 0.15s;
 }
+
 .auto-toggle.on {
   background: var(--accent-dim);
   border-color: var(--accent-line);
 }
+
 .auto-toggle.on span {
   left: 14px;
   background: var(--accent);
 }
+
 .mob {
   text-align: center;
 }
+
 .mob-qr {
   width: 130px;
   height: 130px;
@@ -1323,38 +1507,47 @@ button {
   overflow: hidden;
   position: relative;
 }
+
 .mob-title {
   font-size: 14px;
   font-weight: 600;
 }
+
 .mob-sub {
   font-size: 12px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   margin-top: 4px;
   line-height: 1.4;
 }
+
 .nt-row {
   display: flex;
   gap: 9px;
   padding: 10px;
   border-radius: 9px;
 }
+
 .nt-row:hover {
   background: var(--card-2);
 }
+
 .nt-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+
 .nt-title {
   font-size: 12.5px;
   color: var(--fg);
   line-height: 1.35;
 }
+
 .nt-time {
   font-size: 10.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
 }
 
 /* ---------- COMPOSER ---------- */
@@ -1362,6 +1555,7 @@ button {
   max-width: 760px;
   margin: 0 auto 8px;
 }
+
 .composer-title {
   text-align: center;
   font-size: 30px;
@@ -1370,6 +1564,7 @@ button {
   margin: 18px 0 26px;
   color: var(--fg);
 }
+
 .cmp-box {
   background: var(--card);
   border: 1px solid var(--line);
@@ -1380,12 +1575,14 @@ button {
     border-color 0.15s,
     box-shadow 0.15s;
 }
+
 .cmp-box:focus-within {
   border-color: var(--accent-line);
   box-shadow:
     0 0 0 3px var(--accent-glow),
     var(--shadow-card);
 }
+
 .cmp-input {
   width: 100%;
   border: none;
@@ -1398,15 +1595,18 @@ button {
   outline: none;
   padding: 2px;
 }
+
 .cmp-input::placeholder {
   color: var(--fg-muted);
 }
+
 .cmp-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
 }
+
 .cmp-add {
   width: 32px;
   height: 32px;
@@ -1416,10 +1616,12 @@ button {
   color: var(--fg-muted);
   border: 1px solid var(--line-soft);
 }
+
 .cmp-add:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .cmp-mode {
   display: flex;
   align-items: center;
@@ -1430,10 +1632,12 @@ button {
   color: var(--fg-muted);
   border: 1px solid var(--line-soft);
 }
+
 .cmp-mode:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .cmp-model {
   display: flex;
   align-items: center;
@@ -1443,13 +1647,16 @@ button {
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .cmp-model:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .cmp-eff {
   color: var(--fg-faint);
 }
+
 .cmp-icon {
   width: 32px;
   height: 32px;
@@ -1458,15 +1665,18 @@ button {
   place-items: center;
   color: var(--fg-muted);
 }
+
 .cmp-icon:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .cmp-icon:focus-visible,
 .attach-chip-remove:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .cmp-send {
   width: 34px;
   height: 34px;
@@ -1479,12 +1689,15 @@ button {
     background 0.15s,
     transform 0.1s;
 }
+
 .cmp-send[data-on="true"] {
   background: var(--accent);
 }
+
 .cmp-send[data-on="true"]:hover {
   transform: translateY(-1px);
 }
+
 .cmp-send:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1497,6 +1710,7 @@ button {
   gap: 6px;
   padding: 4px 2px;
 }
+
 .attach-chip {
   display: inline-flex;
   align-items: center;
@@ -1507,6 +1721,7 @@ button {
   background: var(--card);
   max-width: 280px;
 }
+
 .attach-chip-thumb {
   width: 40px;
   height: 40px;
@@ -1514,6 +1729,7 @@ button {
   border-radius: 5px;
   flex: none;
 }
+
 .attach-chip-name {
   font-size: 12.5px;
   color: var(--fg);
@@ -1522,11 +1738,13 @@ button {
   white-space: nowrap;
   max-width: 140px;
 }
+
 .attach-chip-size {
   font-size: 11px;
   color: var(--fg-muted);
   flex: none;
 }
+
 .attach-chip-remove {
   width: 24px;
   height: 24px;
@@ -1536,10 +1754,12 @@ button {
   border-radius: 6px;
   color: var(--fg-muted);
 }
+
 .attach-chip-remove:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .attach-drop-zone {
   padding: 10px 14px;
   border: 1px dashed var(--line);
@@ -1548,14 +1768,17 @@ button {
     border-color 0.15s,
     background 0.15s;
 }
+
 .attach-drop-zone[data-dragover="true"] {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .attach-drop-hint {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .attach-rejection-alert {
   padding: 9px 11px;
   border-radius: 9px;
@@ -1588,6 +1811,7 @@ button {
   line-height: 1.45;
   box-shadow: 0 8px 24px color-mix(in oklch, var(--bg) 55%, transparent);
 }
+
 .source-limit-alert-dismiss {
   flex: none;
   display: inline-flex;
@@ -1604,10 +1828,12 @@ button {
   line-height: 1;
   cursor: pointer;
 }
+
 .source-limit-alert-dismiss:hover {
   border-color: var(--line);
   color: var(--fg);
 }
+
 .source-limit-alert-dismiss:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -1620,6 +1846,7 @@ button {
   margin-top: 14px;
   justify-content: center;
 }
+
 .chip {
   display: flex;
   align-items: center;
@@ -1631,10 +1858,12 @@ button {
   background: var(--card);
   border: 1px solid var(--line-soft);
 }
+
 .chip:hover {
   border-color: var(--line);
   color: var(--fg);
 }
+
 /* stale .chip-value rule removed — markup uses .chip-label, which inherits
    .chip styles (uiux-fix F037 C328) */
 
@@ -1655,7 +1884,8 @@ button {
   gap: 8px;
   align-items: center;
   font-size: 12px;
-  color: var(--fg-muted); /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
 }
 
 .chat-memory-budget {
@@ -1663,7 +1893,8 @@ button {
   gap: 8px;
   align-items: center;
   font-size: 12px;
-  color: var(--fg-muted); /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
 }
 
 .chat-memory-budget input {
@@ -1684,7 +1915,8 @@ button {
 .chat-memory-summary {
   margin: 0;
   font-size: 12px;
-  color: var(--fg-muted); /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-dim 3.89:1 on dark --card, AA fail (uiux-fix F012) */
 }
 
 .chat-memory-item,
@@ -1731,6 +1963,7 @@ button {
   margin-top: 18px;
   justify-content: center;
 }
+
 .suggest {
   display: flex;
   align-items: center;
@@ -1742,6 +1975,7 @@ button {
   border: 1px solid var(--line-soft);
   background: transparent;
 }
+
 .suggest:hover {
   background: var(--card);
   color: var(--fg);
@@ -1753,11 +1987,13 @@ button {
   max-width: none;
   margin: 0;
 }
+
 .composer-compact .composer-title {
   font-size: 21px;
   text-align: left;
   margin: 12px 2px 18px;
 }
+
 .composer-compact .cmp-context,
 .composer-compact .cmp-suggest {
   justify-content: flex-start;
@@ -1780,13 +2016,16 @@ button {
     box-shadow 0.15s,
     border-color 0.15s;
 }
+
 .window[data-top="true"] {
   box-shadow: var(--shadow-pop);
   border-color: var(--line-strong);
 }
+
 .window[data-max="true"] {
   border-radius: 0;
 }
+
 .win-head {
   display: flex;
   align-items: center;
@@ -1798,18 +2037,22 @@ button {
   cursor: grab;
   user-select: none;
 }
+
 .win-head:active {
   cursor: grabbing;
 }
+
 .win-ico {
   display: grid;
   place-items: center;
 }
+
 .win-title {
   font-size: 13.5px;
   font-weight: 650;
   color: var(--fg);
 }
+
 .win-sub {
   font-size: 11.5px;
   font-weight: 500;
@@ -1822,6 +2065,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .win-btn {
   width: 26px;
   height: 26px;
@@ -1830,6 +2074,7 @@ button {
   border-radius: 7px;
   color: var(--fg-dim);
 }
+
 .win-traffic {
   flex: none;
   display: flex;
@@ -1837,6 +2082,7 @@ button {
   gap: 3px;
   padding: 0 2px;
 }
+
 .win-traffic-btn {
   position: relative;
   width: 28px;
@@ -1848,10 +2094,12 @@ button {
   background: transparent;
   cursor: pointer;
 }
+
 .window[data-max="true"] .win-traffic-btn {
   width: 30px;
   height: 30px;
 }
+
 .win-traffic-btn::before {
   content: "";
   width: 15px;
@@ -1862,25 +2110,32 @@ button {
     inset 0 1px 0 color-mix(in oklch, #fff 34%, transparent),
     0 0 0 1px color-mix(in oklch, #000 8%, transparent);
 }
+
 .window[data-max="true"] .win-traffic-btn::before {
   width: 17px;
   height: 17px;
 }
+
 .win-traffic-close::before {
   background: var(--danger);
 }
+
 .win-traffic-minimize::before {
   background: oklch(0.78 0.15 82);
 }
+
 .win-traffic-maximize::before {
   background: var(--accent);
 }
+
 .win-traffic-btn:hover {
   background: var(--card-2);
 }
+
 .win-traffic-btn:active::before {
   transform: scale(0.92);
 }
+
 .win-zoom {
   display: flex;
   align-items: center;
@@ -1888,10 +2143,12 @@ button {
   opacity: 0;
   transition: opacity 0.12s;
 }
+
 .win-head:hover .win-zoom,
 .win-zoom:focus-within {
   opacity: 1;
 }
+
 .win-zbtn {
   /* uiux-fix F021 C123: was 22×22 — below the WCAG 2.5.8 24px minimum target
      (1px gap to the neighbour, so no spacing exception). Fits the 38px header. */
@@ -1902,19 +2159,23 @@ button {
   border-radius: 6px;
   color: var(--fg-faint);
 }
+
 .win-zbtn:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .win-zpct {
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--fg-dim);
   padding: 0 3px;
   min-width: 36px;
-  height: 24px; /* uiux-fix F021 C123: line-height-tall (~14px) target → 24px (WCAG 2.5.8) */
+  height: 24px;
+  /* uiux-fix F021 C123: line-height-tall (~14px) target → 24px (WCAG 2.5.8) */
   text-align: center;
 }
+
 .win-zpct:hover {
   color: var(--fg);
 }
@@ -1926,6 +2187,7 @@ button {
   z-index: 0;
   pointer-events: none;
 }
+
 /* SVG-Viewport-Fix: .ws-scene is 0×0 (transform-only origin). A `width:100%`
    SVG would inherit 0×0 and Chrome refuses to paint paths outside that frame
    even with overflow:visible. A real, fixed-size viewport (±10000px world
@@ -1938,6 +2200,7 @@ button {
   height: 20000px;
   overflow: visible;
 }
+
 .conn-path {
   fill: none;
   stroke: var(--accent);
@@ -1945,33 +2208,40 @@ button {
   stroke-linecap: round;
   opacity: 0.9;
 }
+
 .conn-temp {
   stroke-dasharray: 6 5;
   opacity: 0.85;
   stroke-width: 2.5;
 }
+
 .conn-dot {
   fill: var(--accent);
   opacity: 0.95;
   filter: drop-shadow(0 0 4px var(--accent));
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .conn-dot {
     animation: conn-dot-pulse 1s ease-in-out infinite;
   }
 }
+
 @keyframes conn-dot-pulse {
+
   0%,
   100% {
     r: 5;
     opacity: 0.95;
   }
+
   50% {
     r: 7;
     opacity: 0.6;
   }
 }
+
 .conn-badge {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -1980,7 +2250,8 @@ button {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  min-height: 24px; /* uiux-fix F021 C123: only remove affordance was ~21px tall (WCAG 2.5.8) */
+  min-height: 24px;
+  /* uiux-fix F021 C123: only remove affordance was ~21px tall (WCAG 2.5.8) */
   border-radius: 999px;
   background: var(--card);
   border: 1px solid var(--accent-line);
@@ -1991,9 +2262,11 @@ button {
   box-shadow: var(--shadow-card);
   white-space: nowrap;
 }
+
 .conn-badge svg {
   display: block;
 }
+
 .conn-badge:hover {
   border-color: var(--danger);
   color: var(--danger);
@@ -2011,38 +2284,46 @@ button {
   stroke-width: 2.75;
   filter: drop-shadow(0 0 5px var(--accent));
 }
+
 .conn-path[data-active="true"][data-intensity="heavy"] {
   stroke-width: 3.4;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .conn-path[data-active="true"] {
     stroke-dasharray: 10 8;
     animation: conn-flow 0.9s linear infinite;
   }
+
   .conn-path[data-active="true"][data-intensity="heavy"] {
     animation-duration: 0.45s;
   }
 }
+
 @keyframes conn-flow {
   to {
     stroke-dashoffset: -18;
   }
 }
+
 /* Reduced-motion: a clearly-different static dashed stroke instead of any movement. */
 .conn-path[data-reduced-motion="true"] {
   stroke-dasharray: 3 6;
   animation: none !important;
 }
+
 .conn-particle {
   fill: var(--accent);
   opacity: 0.95;
   filter: drop-shadow(0 0 4px var(--accent));
 }
+
 .conn-badge[data-active="true"] {
   border-color: var(--accent);
   color: var(--accent-text);
   background: color-mix(in oklch, var(--accent) 16%, var(--card));
 }
+
 .conn-flow-tag {
   margin-left: 1px;
   font-weight: 700;
@@ -2052,6 +2333,7 @@ button {
 .workspace[data-connecting="true"] {
   cursor: crosshair;
 }
+
 .workspace[data-connecting="true"] .window[data-conn="valid"] {
   cursor: cell;
 }
@@ -2076,50 +2358,62 @@ button {
     box-shadow 0.12s;
   pointer-events: auto;
 }
+
 .window:hover .win-port,
 .window[data-conn] .win-port {
   opacity: 1;
 }
+
 .win-port:hover {
   box-shadow: 0 0 0 4px var(--accent-glow);
   opacity: 1;
 }
+
 .win-port:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   opacity: 1;
 }
+
 /* Source-port pulse while connecting — signals which port started the flow */
 .workspace[data-connecting="true"] .window[data-conn="source"] .win-port {
   opacity: 1;
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .workspace[data-connecting="true"] .window[data-conn="source"] .win-port {
     animation: port-pulse 1s ease-in-out infinite;
   }
 }
+
 @keyframes port-pulse {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 var(--accent-glow);
   }
+
   50% {
     box-shadow: 0 0 0 6px transparent;
   }
 }
+
 .wp-t {
   left: 50%;
   top: 0;
 }
+
 .wp-b {
   left: 50%;
   top: 100%;
 }
+
 .wp-l {
   left: 0;
   top: 50%;
 }
+
 .wp-r {
   left: 100%;
   top: 50%;
@@ -2140,18 +2434,22 @@ button {
   background: var(--accent-dim);
   border: 1px solid var(--accent-line);
 }
+
 .chat-ctx .mono {
   color: var(--accent-text);
 }
+
 /* ---------- connector validity + agent/timeline/cmdk ---------- */
 .window[data-conn="valid"] {
   box-shadow:
     0 0 0 2px var(--accent),
     var(--shadow-pop);
 }
+
 .window[data-conn="invalid"] {
   opacity: 0.42;
 }
+
 .window[data-conn="source"] {
   box-shadow:
     0 0 0 2px var(--accent-line),
@@ -2166,16 +2464,19 @@ button {
   padding: 12px 13px;
   gap: 10px;
 }
+
 .arun-head {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
 }
+
 .arun-role {
   font-size: 14px;
   font-weight: 650;
 }
+
 .arun-status {
   display: flex;
   align-items: center;
@@ -2183,12 +2484,14 @@ button {
   font-size: 11.5px;
   font-weight: 600;
 }
+
 .arun-meters {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   flex: none;
 }
+
 .arun-meter {
   background: var(--inset);
   border: 1px solid var(--line-soft);
@@ -2198,17 +2501,21 @@ button {
   flex-direction: column;
   gap: 2px;
 }
+
 .arun-mk {
   font-size: 10px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
 .arun-mv {
   font-size: 14px;
   color: var(--fg);
   font-weight: 600;
 }
+
 .arun-prog {
   height: 4px;
   background: var(--inset);
@@ -2216,18 +2523,21 @@ button {
   overflow: hidden;
   flex: none;
 }
+
 .arun-prog i {
   display: block;
   height: 100%;
   border-radius: 999px;
   transition: width 0.4s;
 }
+
 .arun-perms {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
   flex: none;
 }
+
 .arun-perm {
   display: inline-flex;
   align-items: center;
@@ -2240,11 +2550,13 @@ button {
   border-radius: 6px;
   padding: 3px 7px;
 }
+
 .arun-perm[data-on="true"] {
   color: var(--accent-text);
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .arun-gate {
   flex: none;
   border: 1px solid var(--warn);
@@ -2252,6 +2564,7 @@ button {
   padding: 11px;
   background: color-mix(in oklch, var(--warn) 12%, var(--card));
 }
+
 .arun-gate-h {
   display: flex;
   align-items: center;
@@ -2262,21 +2575,25 @@ button {
   letter-spacing: 0.04em;
   color: var(--warn);
 }
+
 .arun-gate-t {
   font-size: 13.5px;
   font-weight: 600;
   margin-top: 6px;
 }
+
 .arun-gate-d {
   font-size: 11.5px;
   color: var(--fg-muted);
   margin-top: 3px;
 }
+
 .arun-gate-btns {
   display: flex;
   gap: 8px;
   margin-top: 11px;
 }
+
 .arun-btn {
   padding: 7px 14px;
   border-radius: var(--radius-sm);
@@ -2286,28 +2603,34 @@ button {
   background: var(--card);
   color: var(--fg-muted);
 }
+
 .arun-btn:hover:not(:disabled) {
   color: var(--fg);
   background: var(--card-2);
 }
+
 .arun-btn.primary {
   background: var(--accent);
   color: var(--ink-inverse);
   border-color: var(--accent);
   flex: 1;
 }
+
 .arun-btn.primary:hover:not(:disabled) {
   filter: brightness(1.06);
   color: var(--ink-inverse);
 }
+
 .arun-btn.ghost {
   flex: 1;
 }
+
 .arun-btn.danger:hover {
   color: #fff;
   background: color-mix(in oklch, var(--danger) 70%, transparent);
   border-color: var(--danger);
 }
+
 .arun-current {
   display: flex;
   align-items: center;
@@ -2316,21 +2639,25 @@ button {
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .arun-spin {
   display: grid;
   place-items: center;
   color: var(--accent);
   animation: none;
 }
+
 .arun-spin[data-paused="true"] {
   animation: none;
   color: var(--warn);
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .arun-spin:not([data-paused="true"]) {
     animation: spin 1.4s linear infinite;
   }
 }
+
 .arun-log {
   flex: 1;
   min-height: 36px;
@@ -2341,6 +2668,7 @@ button {
   border-top: 1px solid var(--line-soft);
   padding-top: 8px;
 }
+
 .arun-log-row {
   display: flex;
   align-items: center;
@@ -2349,15 +2677,18 @@ button {
   border-radius: 6px;
   font-size: 12px;
 }
+
 .arun-log-row:hover {
   background: var(--card-2);
 }
+
 .arun-log-ico {
   color: var(--fg-dim);
   display: grid;
   place-items: center;
   flex: none;
 }
+
 .arun-log-text {
   flex: 1;
   color: var(--fg-muted);
@@ -2365,11 +2696,14 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .arun-log-t {
   font-size: 10px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   flex: none;
 }
+
 .arun-controls {
   display: flex;
   gap: 8px;
@@ -2378,14 +2712,17 @@ button {
   border-top: 1px solid var(--line-soft);
   padding-top: 9px;
 }
+
 .arun-final {
   font-size: 11.5px;
   color: var(--fg-faint);
   margin-left: auto;
 }
+
 .arun-real {
   overflow: hidden;
 }
+
 .arun-summary {
   display: flex;
   align-items: center;
@@ -2398,14 +2735,17 @@ button {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .arun-summary strong {
   color: var(--fg);
   font-weight: 650;
 }
+
 .arun-real .arun-log {
   flex: none;
   max-height: 150px;
 }
+
 .arun-results {
   flex: 1;
   min-height: 90px;
@@ -2414,6 +2754,7 @@ button {
   flex-direction: column;
   gap: 8px;
 }
+
 .arun-result-card {
   border: 1px solid var(--line-soft);
   background: var(--inset);
@@ -2423,6 +2764,7 @@ button {
   flex-direction: column;
   gap: 7px;
 }
+
 .arun-result-title {
   font-size: 11px;
   color: var(--fg);
@@ -2430,6 +2772,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
 .arun-result-card pre,
 .arun-input pre {
   margin: 0;
@@ -2441,6 +2784,7 @@ button {
   line-height: 1.55;
   white-space: pre;
 }
+
 .arun-input {
   flex: none;
   border: 1px solid var(--line-soft);
@@ -2450,10 +2794,12 @@ button {
   color: var(--fg-muted);
   font-size: 12px;
 }
+
 .arun-input summary {
   cursor: pointer;
   color: var(--fg-faint);
 }
+
 .arun-kv,
 .arun-check-row {
   display: flex;
@@ -2462,13 +2808,16 @@ button {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .arun-kv strong {
   color: var(--fg);
 }
+
 .arun-applied {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .arun-error {
   border: 1px solid color-mix(in oklch, var(--danger) 55%, transparent);
   color: var(--danger);
@@ -2477,15 +2826,18 @@ button {
   padding: 8px 10px;
   font-size: 12px;
 }
+
 .arun-empty {
   justify-content: center;
   color: var(--fg-muted);
   text-align: center;
 }
+
 .arun .dot[data-live="true"] {
   animation: none;
   background: var(--accent);
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .arun .dot[data-live="true"] {
     animation: pulse 1.3s infinite;
@@ -2499,22 +2851,27 @@ button {
   flex-direction: column;
   gap: 2px;
 }
+
 .tl-empty {
   font-size: 12.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   text-align: center;
   padding: 26px 16px;
   line-height: 1.6;
 }
+
 .tl-row {
   display: flex;
   gap: 10px;
   padding: 7px 8px;
   border-radius: 8px;
 }
+
 .tl-row:hover {
   background: var(--card-2);
 }
+
 .tl-dot {
   width: 8px;
   height: 8px;
@@ -2522,12 +2879,14 @@ button {
   margin-top: 5px;
   flex: none;
 }
+
 .tl-body {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
+
 .tl-text {
   font-size: 12.5px;
   color: var(--fg);
@@ -2535,9 +2894,11 @@ button {
      forcing a horizontal scrollbar in the 322px activity window (uiux-fix F029 C398). */
   overflow-wrap: anywhere;
 }
+
 .tl-meta {
   font-size: 10.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2555,6 +2916,7 @@ button {
   background: oklch(0.1 0.004 160 / 0.5);
   backdrop-filter: blur(2px);
 }
+
 .cmdk {
   width: 560px;
   max-width: calc(100% - 40px);
@@ -2564,6 +2926,7 @@ button {
   box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
+
 .cmdk-input {
   display: flex;
   align-items: center;
@@ -2572,6 +2935,7 @@ button {
   border-bottom: 1px solid var(--line-soft);
   color: var(--fg-faint);
 }
+
 .cmdk-input input {
   flex: 1;
   background: none;
@@ -2581,17 +2945,20 @@ button {
   font-size: 15px;
   font-family: var(--font-ui);
 }
+
 .cmdk-list {
   max-height: 50vh;
   overflow: auto;
   padding: 6px;
 }
+
 .cmdk-empty {
   padding: 24px;
   text-align: center;
   color: var(--fg-faint);
   font-size: 13px;
 }
+
 .cmdk-row {
   display: flex;
   align-items: center;
@@ -2605,24 +2972,30 @@ button {
      does not apply (uiux-fix F049 C343) */
   cursor: pointer;
 }
+
 .cmdk-row[data-sel="true"] {
   background: var(--accent-dim);
   color: var(--fg);
 }
+
 .cmdk-ico {
   display: grid;
   place-items: center;
   color: var(--fg-dim);
 }
+
 .cmdk-row[data-sel="true"] .cmdk-ico {
   color: var(--accent);
 }
+
 .cmdk-label {
   font-size: 13.5px;
 }
+
 .cmdk-group {
   font-size: 10.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -2633,6 +3006,7 @@ button {
   flex-direction: column;
   height: 100%;
 }
+
 .set-hero {
   display: flex;
   align-items: center;
@@ -2640,10 +3014,12 @@ button {
   padding: 13px 13px 12px;
   border-bottom: 1px solid var(--line-soft);
 }
+
 .set-title {
   font-size: 14px;
   font-weight: 650;
 }
+
 .set-onprem {
   margin-left: auto;
   display: inline-flex;
@@ -2657,6 +3033,7 @@ button {
   border-radius: 999px;
   padding: 3px 9px 3px 7px;
 }
+
 /* shared tab pattern: Settings tabs + Twin panel tabs (uiux-fix F049 C334:
    .twin-tabs/.twin-tab were byte-identical duplicates of this block) */
 .set-tabs,
@@ -2666,6 +3043,7 @@ button {
   padding: 8px 8px 0;
   border-bottom: 1px solid var(--line-soft);
 }
+
 .set-tab,
 .twin-tab {
   flex: 1;
@@ -2674,33 +3052,40 @@ button {
   color: var(--fg-dim);
   border-radius: 8px 8px 0 0;
 }
+
 .set-tab[data-on="true"],
 .twin-tab[data-on="true"] {
   color: var(--fg);
   background: var(--inset);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
+
 .set-body {
   flex: 1;
   overflow: auto;
   padding: 12px;
 }
+
 .set-sec-h {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 12px;
 }
+
 .set-sec-t {
   font-size: 13px;
   font-weight: 600;
 }
+
 .set-sec-d {
   font-size: 11.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   margin-top: 2px;
   line-height: 1.4;
 }
+
 .set-add {
   margin-left: auto;
   display: inline-flex;
@@ -2714,11 +3099,13 @@ button {
   font-weight: 600;
   white-space: nowrap;
 }
+
 .set-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .ml-row {
   display: flex;
   align-items: center;
@@ -2728,9 +3115,11 @@ button {
   border: 1px solid var(--line-soft);
   background: var(--card);
 }
+
 .ml-row:hover {
   border-color: var(--line);
 }
+
 .ml-ico {
   width: 32px;
   height: 32px;
@@ -2742,10 +3131,12 @@ button {
   place-items: center;
   color: var(--accent);
 }
+
 .ml-info {
   flex: 1;
   min-width: 0;
 }
+
 .ml-top {
   display: flex;
   align-items: center;
@@ -2754,6 +3145,7 @@ button {
      settings body into horizontal overflow at the default window width */
   flex-wrap: wrap;
 }
+
 .ml-name {
   font-size: 13px;
   font-weight: 600;
@@ -2764,6 +3156,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .ml-type {
   font-size: 10px;
   color: var(--fg-faint);
@@ -2771,18 +3164,22 @@ button {
   border-radius: 5px;
   padding: 1px 6px;
 }
+
 .ml-url {
   font-size: 11px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .ml-key {
   font-size: 11px;
   color: var(--fg-dim);
   flex: none;
 }
+
 .ml-status {
   width: 8px;
   height: 8px;
@@ -2790,20 +3187,25 @@ button {
   flex: none;
   background: var(--line-strong);
 }
+
 .ml-status.connected {
   background: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 .ml-status.error {
   background: var(--danger);
 }
+
 .ml-status.ineligible {
   background: var(--warn);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--warn) 22%, transparent);
 }
+
 .ml-status.untested {
   background: var(--fg-faint);
 }
+
 .ml-elig {
   display: inline-flex;
   align-items: center;
@@ -2815,41 +3217,50 @@ button {
   /* uiux-fix C057: was white-space: nowrap — the badge pushed .set-body into
      horizontal scroll and clipped its own explanation; normal wrapping now */
 }
+
 .ml-elig-ok {
   color: var(--fg);
   background: color-mix(in oklab, var(--accent) 14%, transparent);
   border-color: color-mix(in oklab, var(--accent) 30%, transparent);
 }
+
 .ml-elig-no {
   color: var(--fg);
   background: color-mix(in oklab, var(--danger) 14%, transparent);
   border-color: color-mix(in oklab, var(--danger) 30%, transparent);
 }
+
 .set-placeholder {
   font-size: 12.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   padding: 20px 4px;
   text-align: center;
 }
+
 .gpref {
   padding: 4px 2px 8px;
 }
+
 .gpref-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 10px;
 }
+
 .gpref-label {
   font-size: 12.5px;
   color: var(--fg);
   font-weight: 550;
 }
+
 .gpref-val {
   font-size: 12px;
   color: var(--accent-text);
   font-variant-numeric: tabular-nums;
 }
+
 .gpref-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -2861,13 +3272,12 @@ button {
   border-radius: 999px;
   cursor: pointer;
   outline: none;
-  background: linear-gradient(
-    to right,
-    var(--accent) 0 var(--p, 100%),
-    var(--card-2) var(--p, 100%) 100%
-  );
+  background: linear-gradient(to right,
+      var(--accent) 0 var(--p, 100%),
+      var(--card-2) var(--p, 100%) 100%);
   background-clip: content-box;
 }
+
 .gpref-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -2879,6 +3289,7 @@ button {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
+
 .gpref-slider::-moz-range-thumb {
   width: 16px;
   height: 16px;
@@ -2888,12 +3299,14 @@ button {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
+
 .gpref-scale {
   display: flex;
   justify-content: space-between;
   margin-top: 7px;
   font-size: 10.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   letter-spacing: 0.02em;
 }
 
@@ -2903,6 +3316,7 @@ button {
   flex-direction: column;
   height: 100%;
 }
+
 .fpv-bar {
   display: flex;
   align-items: center;
@@ -2912,6 +3326,7 @@ button {
   background: var(--surface);
   flex: none;
 }
+
 .fpv-back {
   width: 26px;
   height: 26px;
@@ -2921,10 +3336,12 @@ button {
   border-radius: 7px;
   color: var(--fg-dim);
 }
+
 .fpv-back:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .fpv-name {
   font-size: 12.5px;
   color: var(--fg);
@@ -2937,6 +3354,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .fpv-lang {
   font-size: 10px;
   color: var(--fg-muted);
@@ -2946,20 +3364,25 @@ button {
   padding: 1px 6px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  flex: none; /* uiux-fix F021 C035: the chip must not be squeezed by a long filename */
+  flex: none;
+  /* uiux-fix F021 C035: the chip must not be squeezed by a long filename */
   white-space: nowrap;
 }
+
 .fpv-code {
   flex: 1;
   overflow: auto;
   background: oklch(0.155 0.004 160);
   padding: 8px 0;
-  font-size: 12.5px; /* match .ed-code — same content class, same type size (uiux-fix F006 C032) */
+  font-size: 12.5px;
+  /* match .ed-code — same content class, same type size (uiux-fix F006 C032) */
   line-height: 1.7;
 }
+
 .fpv-line {
   display: flex;
 }
+
 .fpv-num {
   /* F044 C351 — FilePreview sets --fpv-gutter-w from the file's line count so
      5+-digit line numbers don't overflow the fixed 44px box. */
@@ -2970,11 +3393,13 @@ button {
   color: var(--fg-dim);
   user-select: none;
 }
+
 .fpv-src {
   white-space: pre;
   color: #c5cdd9;
   padding-right: 14px;
 }
+
 .fpv-state {
   padding: 14px 16px;
   margin: 12px;
@@ -2985,57 +3410,73 @@ button {
   border: 1px solid var(--line-soft);
   border-radius: 8px;
 }
+
 .fpv-error {
   color: var(--fg);
   background: color-mix(in oklch, var(--danger) 14%, var(--inset));
   border-color: color-mix(in oklch, var(--danger) 55%, var(--line-soft));
 }
+
 .hl-com {
   color: #6b7787;
   font-style: italic;
 }
+
 .hl-str {
   color: #c3e88d;
 }
+
 .hl-num,
 .hl-lit {
   color: #f78c6c;
 }
+
 .hl-key {
   color: #c792ea;
 }
+
 .hl-type {
   color: #ffcb6b;
 }
+
 .hl-fn {
   color: #82aaff;
 }
+
 .hl-key2 {
   color: #82aaff;
 }
+
 .hl-punct {
   color: #89ddff;
 }
+
 .hl-head {
   color: var(--accent);
   font-weight: 700;
 }
+
 .hl-id,
 .hl-ws {
   color: inherit;
 }
+
 [data-theme="light"] .fpv-code {
   background: oklch(0.97 0.004 160);
 }
+
 [data-theme="light"] .fpv-src {
   color: #2b3440;
 }
+
 [data-theme="light"] .hl-key {
   color: #8b2bb8;
 }
+
 [data-theme="light"] .hl-str {
   color: #2f7d32;
 }
+
 /* uiux-fix F023 C033 — num/lit, type and punct darkened to ≥4.5:1 on the light
    code bg oklch(0.97 0.004 160): #c2570c was 4.13:1 → #b04e08 ≈ 4.9:1;
    #9a6b00 was 4.31:1 → #8a5f00 ≈ 5.2:1; #1f8aa8 was 3.67:1 → #177287 ≈ 5.1:1. */
@@ -3043,13 +3484,16 @@ button {
 [data-theme="light"] .hl-lit {
   color: #b04e08;
 }
+
 [data-theme="light"] .hl-fn,
 [data-theme="light"] .hl-key2 {
   color: #2563c9;
 }
+
 [data-theme="light"] .hl-type {
   color: #8a5f00;
 }
+
 [data-theme="light"] .hl-punct {
   color: #177287;
 }
@@ -3061,6 +3505,7 @@ button {
   display: block;
   border-radius: 6px;
 }
+
 .modesw {
   display: flex;
   align-items: center;
@@ -3070,6 +3515,7 @@ button {
   background: var(--inset);
   border: 1px solid var(--line-soft);
 }
+
 .modesw-opt {
   display: flex;
   align-items: center;
@@ -3080,16 +3526,19 @@ button {
   font-weight: 500;
   color: var(--fg-dim);
 }
+
 .modesw-opt[data-on="true"] {
   background: var(--card);
   color: var(--fg);
   box-shadow: var(--shadow-card);
 }
+
 .modesw[data-mode="autonomous"] .modesw-opt[data-on="true"] {
   background: var(--accent-dim);
   color: var(--accent-text);
   box-shadow: 0 0 0 1px var(--accent-line);
 }
+
 .modesw-av {
   width: 18px;
   height: 18px;
@@ -3104,6 +3553,7 @@ button {
   display: grid;
   place-items: center;
 }
+
 .modesw-orca {
   width: 18px;
   height: 18px;
@@ -3119,6 +3569,7 @@ button {
   padding: 3px 9px 3px 4px;
   color: var(--fg-muted);
 }
+
 .ft-gov[data-mode="autonomous"] {
   /* Intentionally inherits the theme-adaptive --fg-muted label color from
      .ft-gov above. --accent (#4eba87) as the label color fails WCAG 1.4.3 on
@@ -3128,11 +3579,13 @@ button {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .ft-orca {
   width: 15px;
   height: 15px;
   display: block;
 }
+
 .ft-you {
   width: 15px;
   height: 15px;
@@ -3160,6 +3613,7 @@ button {
   flex-direction: column;
   gap: 9px;
 }
+
 .perm-toggle {
   display: flex;
   align-items: center;
@@ -3170,30 +3624,36 @@ button {
   background: var(--inset);
   text-align: left;
 }
+
 .perm-toggle[data-on="true"] {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .perm-orca {
   width: 26px;
   height: 26px;
   flex: none;
 }
+
 .perm-tt {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+
 .perm-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
 }
+
 .perm-desc {
   font-size: 11px;
   color: var(--fg-faint);
 }
+
 /* shared switch pattern: permission + bridge toggles (uiux-fix F049 C334:
    .brg-tg was a byte-identical duplicate of this block) */
 .perm-sw,
@@ -3206,6 +3666,7 @@ button {
   flex: none;
   /* transition gated behind prefers-reduced-motion at end of file (uiux-fix F037 C309) */
 }
+
 .perm-sw span,
 .brg-tg span {
   position: absolute;
@@ -3216,19 +3677,23 @@ button {
   border-radius: 50%;
   background: var(--fg-dim);
 }
+
 .perm-sw.on,
 .brg-tg.on {
   background: var(--accent);
 }
+
 .perm-sw.on span,
 .brg-tg.on span {
   left: 16px;
   background: var(--ink-inverse);
 }
+
 .perm-legacy {
   display: flex;
   gap: 7px;
 }
+
 .perm-opt {
   flex: 1;
   padding: 8px;
@@ -3237,16 +3702,19 @@ button {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .perm-opt[data-on="true"] {
   border-color: var(--accent-line);
   color: var(--accent-text);
   background: var(--accent-dim);
 }
+
 .perm-note {
   font-size: 11px;
   color: var(--fg-faint);
   line-height: 1.45;
 }
+
 .dlg-agent-warning {
   display: flex;
   align-items: center;
@@ -3259,6 +3727,7 @@ button {
   padding: 8px 10px;
   font-size: 12px;
 }
+
 .dlg-current-file {
   display: flex;
   align-items: center;
@@ -3271,17 +3740,20 @@ button {
   font-size: 12px;
   text-align: left;
 }
+
 .dlg-current-file .mono {
   color: var(--accent-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .dlg-agent-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .dlg-note {
   font-size: 11px;
   color: var(--fg-faint);
@@ -3293,6 +3765,7 @@ button {
   flex-direction: column;
   height: 100%;
 }
+
 .twin-hero {
   display: flex;
   align-items: center;
@@ -3300,25 +3773,30 @@ button {
   padding: 13px 13px 12px;
   border-bottom: 1px solid var(--line-soft);
 }
+
 .twin-orca {
   width: 34px;
   height: 34px;
   flex: none;
 }
+
 .twin-id {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
+
 .twin-name {
   font-size: 14px;
   font-weight: 650;
 }
+
 .twin-sub {
   font-size: 11px;
   color: var(--fg-faint);
 }
+
 .twin-mode {
   margin-left: auto;
   font-size: 10.5px;
@@ -3328,11 +3806,13 @@ button {
   border-radius: 999px;
   padding: 3px 9px;
 }
+
 .twin-mode.on {
   color: var(--accent-text);
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 /* .twin-tabs/.twin-tab share the Settings tab pattern — see .set-tabs (uiux-fix F049 C334) */
 .twin-body {
   flex: 1;
@@ -3347,6 +3827,7 @@ button {
   margin: 2px 4px 10px;
   line-height: 1.45;
 }
+
 .pol-row {
   display: flex;
   align-items: center;
@@ -3354,9 +3835,11 @@ button {
   padding: 8px 9px;
   border-radius: 9px;
 }
+
 .pol-row:hover {
   background: var(--card-2);
 }
+
 .pol-text {
   flex: 1;
   display: flex;
@@ -3364,14 +3847,17 @@ button {
   gap: 1px;
   min-width: 0;
 }
+
 .pol-action {
   font-size: 12.5px;
   color: var(--fg);
 }
+
 .pol-scope {
   font-size: 10.5px;
   color: var(--fg-faint);
 }
+
 .pol-dec {
   font-size: 11px;
   font-weight: 600;
@@ -3387,6 +3873,7 @@ button {
   gap: 10px;
   margin: 0 4px 8px;
 }
+
 .evl-run {
   display: inline-flex;
   align-items: center;
@@ -3398,14 +3885,17 @@ button {
   font-size: 12.5px;
   font-weight: 600;
 }
+
 .evl-score {
   font-size: 12px;
   font-family: var(--font-mono);
   color: var(--danger);
 }
+
 .evl-score.ok {
   color: var(--accent-text);
 }
+
 .evl-row {
   display: flex;
   align-items: center;
@@ -3414,30 +3904,37 @@ button {
   border-radius: 9px;
   font-size: 12.5px;
 }
+
 .evl-row:hover {
   background: var(--card-2);
 }
+
 .evl-ico {
   width: 18px;
   display: grid;
   place-items: center;
 }
+
 .evl-row[data-state="pass"] .evl-ico {
   color: var(--accent);
 }
+
 .evl-row[data-state="fail"] .evl-ico {
   color: var(--danger);
 }
+
 .evl-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--line-strong);
 }
+
 .evl-label {
   flex: 1;
   color: var(--fg-muted);
 }
+
 .evl-res {
   font-size: 11px;
 }
@@ -3447,6 +3944,7 @@ button {
   gap: 7px;
   margin-bottom: 8px;
 }
+
 .mem-add input {
   flex: 1;
   background: var(--inset);
@@ -3457,10 +3955,12 @@ button {
   font-size: 12.5px;
   outline: none;
 }
+
 .mem-add input:focus {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 .mem-add button {
   width: 36px;
   flex: none;
@@ -3470,6 +3970,7 @@ button {
   display: grid;
   place-items: center;
 }
+
 .mem-row {
   display: flex;
   align-items: center;
@@ -3478,14 +3979,17 @@ button {
   border-radius: 8px;
   color: var(--accent);
 }
+
 .mem-row:hover {
   background: var(--card-2);
 }
+
 .mem-text {
   flex: 1;
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .mem-x {
   color: var(--fg-faint);
   width: 20px;
@@ -3494,6 +3998,7 @@ button {
   place-items: center;
   border-radius: 5px;
 }
+
 .mem-x:hover {
   color: var(--danger);
   background: var(--inset);
@@ -3509,10 +4014,12 @@ button {
   border-radius: 10px;
   text-align: left;
 }
+
 .brg-row:hover,
 .prs-row:hover {
   background: var(--card-2);
 }
+
 .brg-ico {
   width: 32px;
   height: 32px;
@@ -3524,16 +4031,19 @@ button {
   place-items: center;
   color: var(--fg-dim);
 }
+
 .brg-row[data-on="true"] .brg-ico {
   color: var(--accent);
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .brg-name {
   flex: 1;
   font-size: 13px;
   color: var(--fg);
 }
+
 /* .brg-tg shares the switch pattern — see .perm-sw (uiux-fix F049 C334) */
 .prs-dot {
   width: 9px;
@@ -3542,44 +4052,54 @@ button {
   background: var(--line-strong);
   flex: none;
 }
+
 .prs-row[data-on="true"] .prs-dot {
   background: var(--accent);
 }
+
 .prs-text {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+
 .prs-name {
   font-size: 13px;
   color: var(--fg);
   font-weight: 500;
 }
+
 .prs-desc {
   font-size: 11px;
   color: var(--fg-faint);
 }
+
 .arun-gate[data-esc="true"] {
   border-color: var(--info);
   background: color-mix(in oklch, var(--info) 12%, var(--card));
 }
+
 .arun-gate[data-esc="true"] .arun-gate-h {
   color: var(--info);
 }
+
 .win-btn:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .win-close:hover {
   background: color-mix(in oklch, var(--danger) 24%, transparent);
   color: #fff;
 }
+
 .win-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
+
 .win-body[data-mode="mini"],
 .win-body[data-mode="tiny"] {
   overflow: hidden;
@@ -3600,6 +4120,7 @@ button {
     radial-gradient(circle at 1px 1px, var(--line-soft) 1px, transparent 0) 0 0 / 14px 14px,
     var(--inset);
 }
+
 .ts-ico {
   width: 44px;
   height: 44px;
@@ -3611,15 +4132,18 @@ button {
   color: var(--fg-dim);
   margin-bottom: 3px;
 }
+
 .ts-title {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--fg-muted);
 }
+
 .ts-sub {
   font-size: 11px;
   color: var(--fg-muted);
 }
+
 .ts-arrow {
   color: var(--accent);
   margin-top: 3px;
@@ -3629,6 +4153,7 @@ button {
 .chatw-mini {
   height: 100%;
 }
+
 .composer-fill {
   height: 100%;
   display: flex;
@@ -3638,6 +4163,7 @@ button {
   padding: 12px;
   min-width: 0;
 }
+
 .cmp-box-fill {
   position: relative;
   flex: 1;
@@ -3645,6 +4171,7 @@ button {
   padding: 0;
   overflow: hidden;
 }
+
 .cmp-box-fill .cmp-input {
   width: 100%;
   height: 100%;
@@ -3653,6 +4180,7 @@ button {
   box-sizing: border-box;
   padding: 13px 14px 48px;
 }
+
 .cmp-send-float {
   position: absolute;
   right: 11px;
@@ -3664,6 +4192,7 @@ button {
   position: absolute;
   z-index: 6;
 }
+
 .wz-n {
   top: -3px;
   left: 10px;
@@ -3671,6 +4200,7 @@ button {
   height: 8px;
   cursor: ns-resize;
 }
+
 .wz-s {
   bottom: -3px;
   left: 10px;
@@ -3678,6 +4208,7 @@ button {
   height: 8px;
   cursor: ns-resize;
 }
+
 .wz-e {
   right: -3px;
   top: 10px;
@@ -3685,6 +4216,7 @@ button {
   width: 8px;
   cursor: ew-resize;
 }
+
 .wz-w {
   left: -3px;
   top: 10px;
@@ -3692,6 +4224,7 @@ button {
   width: 8px;
   cursor: ew-resize;
 }
+
 .wz-ne {
   top: -3px;
   right: -3px;
@@ -3699,6 +4232,7 @@ button {
   height: 15px;
   cursor: nesw-resize;
 }
+
 .wz-nw {
   top: -3px;
   left: -3px;
@@ -3706,6 +4240,7 @@ button {
   height: 15px;
   cursor: nwse-resize;
 }
+
 .wz-se {
   bottom: -3px;
   right: -3px;
@@ -3713,6 +4248,7 @@ button {
   height: 15px;
   cursor: nwse-resize;
 }
+
 .wz-sw {
   bottom: -3px;
   left: -3px;
@@ -3750,9 +4286,11 @@ button {
     0 10px 30px -8px var(--accent-glow),
     0 6px 16px rgba(0, 0, 0, 0.5);
 }
+
 .ws-fab:hover {
   transform: translateY(-2px);
 }
+
 .ws-empty {
   position: absolute;
   inset: 0;
@@ -3764,20 +4302,24 @@ button {
   gap: 5px;
   pointer-events: none;
 }
+
 .ws-empty-logo {
   width: 54px;
   height: 54px;
   opacity: 0.5;
   margin-bottom: 8px;
 }
+
 .ws-empty-title {
   font-size: 16px;
   font-weight: 600;
 }
+
 .ws-empty-sub {
   font-size: 13px;
   color: var(--fg-muted);
 }
+
 .ws-empty-btn {
   margin-top: 14px;
   pointer-events: auto;
@@ -3809,16 +4351,19 @@ button {
   box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
+
 @keyframes fadePop {
   from {
     opacity: 0;
     transform: translateY(8px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: none;
   }
 }
+
 .palette-head {
   display: flex;
   align-items: center;
@@ -3827,6 +4372,7 @@ button {
   border-bottom: 1px solid var(--line-soft);
   flex: none;
 }
+
 .palette-badge {
   width: 34px;
   height: 34px;
@@ -3838,23 +4384,27 @@ button {
   background: var(--accent-dim);
   border: 1px solid var(--accent-line);
 }
+
 .palette-htext {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
+
 .palette-title {
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
+
 .palette-sub {
   font-size: 11.5px;
   color: var(--fg-faint);
   white-space: nowrap;
 }
+
 .palette-x {
   width: 30px;
   height: 30px;
@@ -3864,10 +4414,12 @@ button {
   border-radius: 8px;
   color: var(--fg-dim);
 }
+
 .palette-x:hover {
   background: var(--card);
   color: var(--fg);
 }
+
 .palette-grid {
   padding: 10px;
   display: grid;
@@ -3879,6 +4431,7 @@ button {
   align-content: start;
   align-items: start;
 }
+
 .pal-card {
   border: 1px solid var(--line-soft);
   border-radius: 11px;
@@ -3886,9 +4439,11 @@ button {
   background: var(--card);
   transition: border-color 0.12s;
 }
+
 .pal-card:hover {
   border-color: var(--accent-line);
 }
+
 .pal-main {
   position: relative;
   display: grid;
@@ -3899,9 +4454,11 @@ button {
   padding: 12px 11px;
   text-align: left;
 }
+
 .pal-main:hover {
   background: var(--card-2);
 }
+
 .pal-ico {
   grid-row: 1 / 3;
   align-self: center;
@@ -3914,6 +4471,7 @@ button {
   display: grid;
   place-items: center;
 }
+
 .pal-name {
   font-size: 13.5px;
   font-weight: 600;
@@ -3921,10 +4479,12 @@ button {
   align-self: end;
   padding-right: 18px;
 }
+
 .pal-desc {
   font-size: 11.5px;
   color: var(--fg-faint);
 }
+
 .pal-add {
   position: absolute;
   top: 9px;
@@ -3936,6 +4496,7 @@ button {
   border-radius: 6px;
   color: var(--fg-faint);
 }
+
 .pal-card:hover .pal-add {
   color: var(--accent);
   background: var(--accent-dim);
@@ -3953,9 +4514,11 @@ button {
   backdrop-filter: blur(2px);
   opacity: 0;
 }
+
 .dlg-overlay.in {
   opacity: 1;
 }
+
 .dlg {
   width: 420px;
   max-width: 100%;
@@ -3969,18 +4532,22 @@ button {
   overflow: hidden;
   transform: translateY(10px) scale(0.985);
 }
+
 .dlg-overlay.in .dlg {
   transform: none;
 }
+
 /* WCAG 2.3.3 — dialog entry transitions only run when the user has not requested reduced motion */
 @media (prefers-reduced-motion: no-preference) {
   .dlg-overlay {
     transition: opacity 0.16s ease;
   }
+
   .dlg {
     transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 }
+
 .dlg-head {
   display: flex;
   align-items: center;
@@ -3989,6 +4556,7 @@ button {
   border-bottom: 1px solid var(--line-soft);
   flex: none;
 }
+
 .dlg-ico {
   width: 40px;
   height: 40px;
@@ -4000,21 +4568,25 @@ button {
   background: var(--accent-dim);
   border: 1px solid var(--accent-line);
 }
+
 .dlg-htext {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
+
 .dlg-title {
   font-size: 15.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
+
 .dlg-sub {
   font-size: 12px;
   color: var(--fg-faint);
 }
+
 .dlg-body {
   padding: 18px 18px 6px;
   overflow: auto;
@@ -4022,16 +4594,19 @@ button {
   flex-direction: column;
   gap: 14px;
 }
+
 .dlg-empty {
   font-size: 13px;
   color: var(--fg-muted);
   padding: 6px 0 14px;
 }
+
 .dlg-field {
   display: flex;
   flex-direction: column;
   gap: 7px;
 }
+
 .dlg-label {
   font-size: 12px;
   font-weight: 600;
@@ -4040,6 +4615,7 @@ button {
   align-items: center;
   gap: 8px;
 }
+
 .dlg-opt {
   font-size: 10px;
   font-weight: 500;
@@ -4050,6 +4626,7 @@ button {
   border-radius: 5px;
   padding: 1px 5px;
 }
+
 .dlg-input {
   width: 100%;
   background: var(--inset);
@@ -4060,23 +4637,28 @@ button {
   padding: 10px 12px;
   outline: none;
 }
+
 .dlg-input:focus {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 .dlg-input::placeholder {
   color: var(--fg-faint);
 }
+
 .dlg-textarea {
   resize: vertical;
   min-height: 64px;
   font-family: var(--font-ui);
   line-height: 1.5;
 }
+
 select.dlg-input {
   appearance: none;
   cursor: pointer;
 }
+
 .dlg-foot {
   display: flex;
   justify-content: flex-end;
@@ -4084,6 +4666,7 @@ select.dlg-input {
   padding: 14px 18px 18px;
   flex: none;
 }
+
 .dlg-btn {
   padding: 9px 16px;
   border-radius: 9px;
@@ -4093,31 +4676,38 @@ select.dlg-input {
   border: 1px solid var(--line);
   background: var(--card);
 }
+
 .dlg-btn:hover:not(:disabled) {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .dlg-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
 .dlg-primary {
   color: var(--ink-inverse);
   background: var(--accent);
   border-color: var(--accent);
 }
+
 .dlg-primary:hover:not(:disabled) {
   filter: brightness(1.06);
   background: var(--accent);
   color: var(--ink-inverse);
 }
+
 .dlg-selwrap {
   position: relative;
   display: block;
 }
+
 .dlg-selwrap .dlg-input {
   padding-right: 34px;
 }
+
 .dlg-selchev {
   position: absolute;
   right: 11px;
@@ -4134,6 +4724,7 @@ select.dlg-input {
 .rail-avatar {
   position: relative;
 }
+
 /* [data-tip] guard (uiux-fix F014 C016): without it, a missing attribute resolved
    attr(data-tip) to "" and hover rendered an empty styled pill next to the button. */
 .rail-btn[data-tip]::after,
@@ -4156,16 +4747,19 @@ select.dlg-input {
   pointer-events: none;
   z-index: 9999;
 }
+
 .rail-left .rail-btn::after,
 .rail-left .rail-new::after,
 .rail-left .rail-avatar::after {
   left: calc(100% + 8px);
 }
+
 .rail-right .rail-btn::after {
   right: calc(100% + 8px);
   left: auto;
   transform: translateY(-50%) translateX(4px);
 }
+
 .rail-btn:hover::after,
 .rail-new:hover::after,
 .rail-avatar:hover::after {
@@ -4180,6 +4774,7 @@ select.dlg-input {
   gap: 9px;
   margin: 8px 0 12px;
 }
+
 .insp-ico {
   width: 30px;
   height: 30px;
@@ -4189,13 +4784,16 @@ select.dlg-input {
   display: grid;
   place-items: center;
 }
+
 .insp-title {
   font-size: 14px;
   font-weight: 650;
 }
+
 .insp-empty {
   font-size: 12.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F026) */
   padding: 10px 0 14px;
 }
 
@@ -4206,11 +4804,13 @@ select.dlg-input {
   gap: 8px;
   margin-bottom: 9px;
 }
+
 .ag-role {
   font-size: 13px;
   font-weight: 650;
   color: var(--fg);
 }
+
 .ag-model {
   font-size: 10.5px;
   color: var(--accent-text);
@@ -4219,6 +4819,7 @@ select.dlg-input {
   padding: 2px 7px;
   border-radius: 999px;
 }
+
 .ag-task {
   font-size: 12px;
   color: var(--fg-muted);
@@ -4229,6 +4830,7 @@ select.dlg-input {
   margin-bottom: 11px;
   line-height: 1.42;
 }
+
 .rv-arrow {
   color: var(--fg-faint);
   margin: 0 1px;
@@ -4240,6 +4842,7 @@ select.dlg-input {
     display: none;
   }
 }
+
 @media (max-width: 1000px) {
   .ft-opt2 {
     display: none;
@@ -4252,6 +4855,7 @@ select.dlg-input {
   flex-direction: column;
   height: 100%;
 }
+
 .ed-tabs {
   display: flex;
   gap: 2px;
@@ -4259,6 +4863,7 @@ select.dlg-input {
   padding: 6px 8px 0;
   border-bottom: 1px solid var(--line-soft);
 }
+
 .ed-tab {
   display: flex;
   align-items: center;
@@ -4268,10 +4873,12 @@ select.dlg-input {
   color: var(--fg-faint);
   border-radius: 8px 8px 0 0;
 }
+
 .ed-tab.active {
   color: var(--fg);
   background: var(--inset);
 }
+
 .ed-save {
   padding: 6px 10px;
   border-radius: 8px;
@@ -4280,13 +4887,16 @@ select.dlg-input {
   background: var(--card);
   border: 1px solid var(--line-soft);
 }
+
 .ed-save:hover:not(:disabled) {
   background: var(--card-2);
 }
+
 .ed-save:disabled {
   opacity: 0.5;
   cursor: default;
 }
+
 .ed-meta {
   display: flex;
   align-items: center;
@@ -4297,18 +4907,22 @@ select.dlg-input {
   font-size: 11px;
   color: var(--fg-dim);
 }
+
 .ed-status {
   min-width: 0;
 }
+
 .ed-limit {
   margin-left: auto;
   color: var(--fg-faint);
 }
+
 .ed-empty {
   padding: 12px;
   font-size: 12px;
   color: var(--fg-dim);
 }
+
 .ed-textarea {
   flex: 1;
   width: 100%;
@@ -4320,10 +4934,12 @@ select.dlg-input {
   font-size: 12.5px;
   line-height: 1.7;
 }
+
 .ed-textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .ed-code {
   padding: 8px 0;
   font-size: 12.5px;
@@ -4332,40 +4948,51 @@ select.dlg-input {
   overflow: auto;
   background: var(--inset);
 }
+
 .ed-line {
   display: flex;
   padding: 0 12px;
 }
+
 .ed-num {
-  width: 44px; /* match .fpv-num gutter — preview metric fits real file line counts (uiux-fix F006 C032) */
+  width: 44px;
+  /* match .fpv-num gutter — preview metric fits real file line counts (uiux-fix F006 C032) */
   color: var(--fg-dim);
   text-align: right;
   padding-right: 16px;
   user-select: none;
 }
+
 .ed-src {
   white-space: pre;
 }
+
 .tk-k {
   color: var(--accent-bright);
   font-weight: 500;
 }
+
 .tk-f {
   color: var(--fg);
 }
+
 .tk-s {
   color: var(--accent);
 }
+
 .tk-c {
   color: var(--fg-faint);
   font-style: italic;
 }
+
 .tk-p {
   color: var(--fg-dim);
 }
+
 .tk-a {
   color: var(--fg-muted);
 }
+
 .tk-v {
   color: var(--fg-muted);
 }
@@ -4379,31 +5006,38 @@ select.dlg-input {
   flex-direction: column;
   min-height: 0;
 }
+
 .chatw-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 4px 16px 18px;
 }
+
 .chatw-log {
   display: flex;
   flex-direction: column;
 }
+
 .chatw-foot {
   flex: none;
   padding: 0 16px 14px;
 }
+
 .chatw-foot .composer {
   max-width: none;
   margin: 0;
 }
+
 .chat-msg {
   display: flex;
   margin-bottom: 14px;
 }
+
 .chat-msg[data-role="user"] {
   justify-content: flex-end;
 }
+
 .chat-msg-bubble {
   max-width: min(640px, 84%);
   border: 1px solid var(--line-soft);
@@ -4416,10 +5050,12 @@ select.dlg-input {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
 .chat-msg[data-role="user"] .chat-msg-bubble {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
+
 .chat-msg-role {
   font-size: 10px;
   font-weight: 800;
@@ -4428,6 +5064,7 @@ select.dlg-input {
   color: var(--fg-muted);
   margin-bottom: 5px;
 }
+
 .chat-msg-brand {
   width: 24px;
   height: 24px;
@@ -4436,6 +5073,7 @@ select.dlg-input {
   justify-content: center;
   margin: 0 0 6px -1px;
 }
+
 .chat-msg-brand img {
   width: 22px;
   height: 22px;
@@ -4443,37 +5081,44 @@ select.dlg-input {
   transform-origin: center;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.72)) drop-shadow(0 0 4px rgba(126, 224, 171, 0.22));
 }
+
 .chat-msg-brand[data-pulsing="true"] img {
   animation: chat-keiko-logo-pulse 1.15s cubic-bezier(0.42, 0, 0.58, 1) infinite;
 }
+
 @keyframes chat-keiko-logo-pulse {
+
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.72))
-      drop-shadow(0 0 4px rgba(126, 224, 171, 0.22));
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.72)) drop-shadow(0 0 4px rgba(126, 224, 171, 0.22));
   }
+
   50% {
     transform: scale(1.14);
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.72)) drop-shadow(0 0 8px rgba(126, 224, 171, 0.4));
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .chat-msg-brand[data-pulsing="true"] img {
     animation: none;
   }
 }
+
 .chat-msg-time {
   font-size: 10px;
   color: var(--fg-muted);
   margin-top: 6px;
   font-family: var(--font-mono);
 }
+
 .chat-typing {
   display: inline-flex;
   gap: 4px;
   align-items: center;
 }
+
 .chat-typing i {
   width: 6px;
   height: 6px;
@@ -4481,17 +5126,21 @@ select.dlg-input {
   background: var(--fg-faint);
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .chat-typing i {
     animation: pulse 1.2s infinite;
   }
+
   .chat-typing i:nth-child(2) {
     animation-delay: 0.2s;
   }
+
   .chat-typing i:nth-child(3) {
     animation-delay: 0.4s;
   }
 }
+
 /* functional model picker, styled as the design's static .cmp-model chip */
 .cmp-model-select {
   appearance: none;
@@ -4506,6 +5155,7 @@ select.dlg-input {
   max-width: 168px;
   text-overflow: ellipsis;
 }
+
 .cmp-model-select option {
   /* Pair color with an explicit background: under color-scheme:dark Chromium
      (Win/Linux) renders the option popup dark and honors option CSS — a bare
@@ -4513,6 +5163,7 @@ select.dlg-input {
   color: var(--fg);
   background: var(--surface);
 }
+
 .cmp-err {
   margin-top: 10px;
   /* token-mixed border instead of hardcoded dark-theme danger rgb, so the light
@@ -4541,6 +5192,7 @@ select.dlg-input {
   font-size: 12.5px;
   color: var(--fg);
 }
+
 .cmp-loading-dot {
   width: 7px;
   height: 7px;
@@ -4549,6 +5201,7 @@ select.dlg-input {
   flex: none;
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .cmp-loading-dot {
     animation: pulse 1.4s infinite;
@@ -4591,6 +5244,7 @@ select.dlg-input {
   display: inline-flex;
   align-items: center;
 }
+
 .rb-edge-badge-btn,
 .rb-edge-badge-static {
   display: inline-flex;
@@ -4605,6 +5259,7 @@ select.dlg-input {
   /* Minimum 24×24 touch target (WCAG 2.5.8) when interactive */
   min-height: 20px;
 }
+
 .rb-edge-badge-btn {
   cursor: pointer;
   background: none;
@@ -4613,25 +5268,31 @@ select.dlg-input {
   min-height: 24px;
   min-width: 24px;
 }
+
 .rb-edge-badge-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .rb-edge-badge-label {
   font-size: 11px;
 }
+
 .rb-edge-badge-type {
   font-size: 10px;
   opacity: 0.7;
   margin-left: 2px;
 }
+
 .rb-edge-badge-icon {
   display: block;
 }
+
 .rb-edge-badge-icon--high-contrast {
   transform: scale(1.1);
   transform-origin: center;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .rb-edge-badge-icon--processing {
     animation: spin 1.6s linear infinite;
@@ -4640,10 +5301,12 @@ select.dlg-input {
 
 /* prefers-contrast: more — drop color-mix backgrounds; use card + state-color border */
 @media (prefers-contrast: more) {
+
   .rb-edge-badge-btn,
   .rb-edge-badge-static {
     background: var(--card) !important;
   }
+
   .rb-edge-badge-icon {
     transform: scale(1.1);
     transform-origin: center;
@@ -4661,11 +5324,13 @@ select.dlg-input {
   text-align: center;
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .chatw-empty {
     animation: fadeUp 0.25s ease both;
   }
 }
+
 .chatw-empty-headline {
   font-size: 22px;
   font-weight: 600;
@@ -4673,6 +5338,7 @@ select.dlg-input {
   color: var(--fg);
   margin: 0 0 8px;
 }
+
 .chatw-empty-sub {
   font-size: 13.5px;
   color: var(--fg-muted);
@@ -4680,6 +5346,7 @@ select.dlg-input {
   max-width: 340px;
   line-height: 1.55;
 }
+
 .chatw-empty-prompts {
   display: flex;
   flex-wrap: wrap;
@@ -4687,6 +5354,7 @@ select.dlg-input {
   justify-content: center;
   max-width: 480px;
 }
+
 .chatw-empty-no-chat {
   display: flex;
   flex-direction: column;
@@ -4697,11 +5365,13 @@ select.dlg-input {
   text-align: center;
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .chatw-empty-no-chat {
     animation: fadeUp 0.25s ease both;
   }
 }
+
 .chatw-empty-no-chat-icon {
   width: 40px;
   height: 40px;
@@ -4713,12 +5383,14 @@ select.dlg-input {
   color: var(--accent);
   margin-bottom: 14px;
 }
+
 .chatw-empty-no-chat-label {
   font-size: 14px;
   font-weight: 600;
   color: var(--fg);
   margin: 0 0 6px;
 }
+
 .chatw-empty-no-chat-hint {
   font-size: 12.5px;
   color: var(--fg-muted);
@@ -4750,23 +5422,28 @@ select.dlg-input {
   flex-direction: column;
   padding: 14px 14px 12px;
 }
+
 .rb-head {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
+
 .rb-title {
   font-size: 14px;
   font-weight: 600;
 }
+
 .rb-count {
   font-size: 11px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   background: var(--inset);
   padding: 2px 8px;
   border-radius: 999px;
 }
+
 .rb-section-label {
   font-size: 11px;
   font-weight: 600;
@@ -4775,6 +5452,7 @@ select.dlg-input {
   color: var(--fg-faint);
   margin: 16px 0 8px;
 }
+
 .rb-placeholder {
   position: relative;
   height: 116px;
@@ -4784,6 +5462,7 @@ select.dlg-input {
   display: grid;
   place-items: center;
 }
+
 .rb-ph-label {
   position: relative;
   font-size: 11px;
@@ -4791,11 +5470,13 @@ select.dlg-input {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
 .rb-rows {
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+
 .rb-row {
   display: flex;
   align-items: center;
@@ -4804,18 +5485,22 @@ select.dlg-input {
   border-radius: 8px;
   font-size: 12.5px;
 }
+
 .rb-row:hover {
   background: var(--card);
 }
+
 .rb-row-k {
   color: var(--fg-muted);
 }
+
 .rb-row-v {
   /* uiux-fix F012: .rb-row-v also carries real values outside the governance scope
      (RelationshipInspectorPanel/RelationshipHealthPanel) — extend the #527 fix below
      to the base rule; --fg-faint was 2.52:1 dark / 2.91:1 light. */
   color: var(--fg-muted);
 }
+
 /* Issue #527 — WCAG 2.2 AA contrast fix (scoped to governance surface only).
    --fg-faint yields 2.52:1 dark / 2.91:1 light, both below the 4.5:1 minimum.
    --fg-muted yields 7.77:1 dark / 7.90:1 light (normal) and 7.23:1 / 8.41:1
@@ -4826,6 +5511,7 @@ select.dlg-input {
 .insp-governance .rb-row-v {
   color: var(--fg-muted);
 }
+
 .rb-foot {
   font-size: 11px;
   color: var(--fg-faint);
@@ -4846,6 +5532,7 @@ select.dlg-input {
   height: 100%;
   padding: 6px 6px;
 }
+
 .files-refresh {
   position: absolute;
   top: 4px;
@@ -4863,23 +5550,28 @@ select.dlg-input {
     color 0.12s,
     background 0.12s;
 }
+
 .window:hover .files-refresh,
 .files-refresh:focus-visible {
   opacity: 1;
 }
+
 .files-refresh:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 /* Epic #532 connector — open ANY machine path from inside the Files window (not just the repo). */
 .files-root-bar {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 34px 8px 2px; /* right pad clears the absolute refresh button */
+  padding: 2px 34px 8px 2px;
+  /* right pad clears the absolute refresh button */
   border-bottom: 1px solid var(--line-soft);
   margin-bottom: 4px;
 }
+
 .files-root-up {
   flex: 0 0 auto;
   width: 28px;
@@ -4891,14 +5583,17 @@ select.dlg-input {
   background: var(--card);
   color: var(--fg-muted);
 }
+
 .files-root-up:hover:not(:disabled) {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .files-root-up:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
 .files-root-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -4911,13 +5606,16 @@ select.dlg-input {
   background: var(--inset);
   color: var(--fg);
 }
+
 .files-root-input::placeholder {
   color: var(--fg-faint);
 }
+
 .files-root-input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
 .files-root-open {
   flex: 0 0 auto;
   height: 28px;
@@ -4929,9 +5627,11 @@ select.dlg-input {
   background: var(--accent);
   color: var(--ink-inverse);
 }
+
 .files-root-open:hover {
   filter: brightness(1.06);
 }
+
 .file-mut {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -4944,6 +5644,7 @@ select.dlg-input {
   flex-direction: column;
   height: 100%;
 }
+
 .bw-bar {
   display: flex;
   align-items: center;
@@ -4952,11 +5653,13 @@ select.dlg-input {
   border-bottom: 1px solid var(--line-soft);
   color: var(--fg-faint);
 }
+
 .bw-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
 }
+
 .bw-url {
   flex: 1;
   display: flex;
@@ -4968,11 +5671,13 @@ select.dlg-input {
   font-size: 11.5px;
   color: var(--fg-muted);
 }
+
 .bw-view {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
+
 .bw-overlay {
   position: absolute;
   left: 50%;
@@ -4988,20 +5693,24 @@ select.dlg-input {
   max-width: 85%;
   text-align: center;
 }
+
 .bw-field {
   display: flex;
   align-items: center;
   gap: 6px;
 }
+
 .bw-field-url {
   flex: 1;
 }
+
 .bw-field-label {
   font-size: 10.5px;
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
 .bw-input {
   background: var(--inset);
   border: 1px solid var(--line-strong);
@@ -5011,14 +5720,17 @@ select.dlg-input {
   color: var(--fg);
   min-width: 80px;
 }
+
 .bw-input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
 .bw-input-url {
   flex: 1;
   min-width: 160px;
 }
+
 .bw-actions {
   display: flex;
   flex-wrap: wrap;
@@ -5026,6 +5738,7 @@ select.dlg-input {
   padding: 8px 10px;
   border-bottom: 1px solid var(--line-soft);
 }
+
 .bw-btn {
   background: var(--inset);
   border: 1px solid var(--line);
@@ -5037,17 +5750,21 @@ select.dlg-input {
   min-height: 28px;
   min-width: 64px;
 }
+
 .bw-btn:hover:not(:disabled) {
   border-color: var(--accent-line);
 }
+
 .bw-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
 .bw-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .bw-btn-primary {
   background: var(--accent);
   /* --ink-inverse is the established pairing for text on --accent (6.94:1);
@@ -5055,17 +5772,20 @@ select.dlg-input {
   color: var(--ink-inverse);
   border-color: var(--accent);
 }
+
 .bw-btn-danger {
   background: color-mix(in oklch, var(--danger) 18%, var(--inset));
   color: var(--fg);
   border-color: color-mix(in oklch, var(--danger) 55%, var(--line-soft));
 }
+
 .bw-status {
   padding: 6px 10px;
   font-size: 11.5px;
   color: var(--fg-muted);
   margin: 0;
 }
+
 .bw-error {
   padding: 8px 10px;
   /* --danger-bg was defined nowhere → the warm-orange rgba fallback always won;
@@ -5076,17 +5796,20 @@ select.dlg-input {
   border-bottom: 1px solid var(--line-soft);
   font-size: 12px;
 }
+
 .bw-screenshot {
   max-width: 100%;
   max-height: 100%;
   display: block;
   margin: 0 auto;
 }
+
 .bw-log {
   border-top: 1px solid var(--line-soft);
   max-height: 140px;
   overflow: auto;
 }
+
 .bw-log-list {
   list-style: none;
   margin: 0;
@@ -5096,11 +5819,13 @@ select.dlg-input {
   gap: 3px;
   font-size: 11.5px;
 }
+
 .bw-log-item {
   display: flex;
   gap: 8px;
   color: var(--fg-muted);
 }
+
 .bw-log-kind {
   /* uiux-fix F019 C384: 120px fits the longest eventLabel ("screenshot captured")
      at 11.5px so both columns stay aligned; flex:none prevents shrinking. */
@@ -5108,6 +5833,7 @@ select.dlg-input {
   flex: none;
   color: var(--fg-muted);
 }
+
 .bw-log-detail {
   flex: 1;
   /* uiux-fix F019 C384: truncate long details like .tm-event-detail instead of
@@ -5131,29 +5857,35 @@ select.dlg-input {
   flex-direction: column;
   height: 100%;
 }
+
 .rv-file {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0; /* h3 — UA margin-block broke the 9/12px padding rhythm (uiux-fix F023 C267) */
+  margin: 0;
+  /* h3 — UA margin-block broke the 9/12px padding rhythm (uiux-fix F023 C267) */
   padding: 9px 12px;
   border-bottom: 1px solid var(--line-soft);
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .rv-stat {
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 5px;
 }
+
 .rv-stat.add {
   color: var(--accent-text);
   background: var(--accent-dim);
 }
+
 .rv-stat.del {
   color: var(--danger);
   background: color-mix(in oklch, var(--danger) 16%, transparent);
 }
+
 .rv-code {
   padding: 8px 0;
   font-size: 12.5px;
@@ -5161,32 +5893,40 @@ select.dlg-input {
   flex: 1;
   overflow: auto;
 }
+
 .rv-line {
   display: flex;
   padding: 0 12px;
 }
+
 .rv-line.rv-add {
   background: color-mix(in oklch, var(--ok) 10%, transparent);
 }
+
 .rv-line.rv-del {
   background: color-mix(in oklch, var(--danger) 12%, transparent);
 }
+
 .rv-gutter {
   width: 14px;
   color: var(--fg-faint);
 }
+
 .rv-add .rv-gutter {
   color: var(--accent-text);
 }
+
 .rv-del .rv-gutter {
   color: var(--danger);
 }
+
 .rv-num {
   width: 26px;
   color: var(--fg-faint);
   text-align: right;
   padding-right: 12px;
 }
+
 .rv-src {
   color: var(--fg-muted);
   white-space: pre;
@@ -5204,6 +5944,7 @@ select.dlg-input {
   white-space: nowrap;
   border: 0;
 }
+
 /* dual line-number gutters: old and new side, 36px each */
 .rv-num-old,
 .rv-num-new {
@@ -5215,11 +5956,13 @@ select.dlg-input {
   font-size: 11px;
   user-select: none;
 }
+
 /* meta line (\ No newline at end of file) */
 .rv-line.rv-meta {
   color: var(--fg-faint);
   font-style: italic;
 }
+
 /* hunk header row — dimmed @@ header */
 .rv-hunk {
   padding: 2px 12px;
@@ -5227,17 +5970,20 @@ select.dlg-input {
   background: var(--inset);
   font-size: 11.5px;
 }
+
 /* file section heading reuse .rv-file (already defined) */
 .rv-oldpath {
   color: var(--fg-faint);
   font-style: italic;
 }
+
 .rv-elevated {
   margin-left: 4px;
   color: var(--warn, var(--danger));
   font-weight: 700;
   font-size: 11px;
 }
+
 /* header bar: status + model + counts + evidence */
 .rv-header {
   display: flex;
@@ -5248,18 +5994,22 @@ select.dlg-input {
   font-size: 12px;
   flex-wrap: wrap;
 }
+
 .rv-status {
   color: var(--fg-muted);
 }
+
 .rv-model {
   color: var(--fg-faint);
 }
+
 .rv-counts {
   display: flex;
   align-items: center;
   gap: 4px;
   color: var(--fg-muted);
 }
+
 /* evidence link — enabled */
 .rv-evidence-link {
   font-size: 11.5px;
@@ -5269,13 +6019,16 @@ select.dlg-input {
   border-radius: 6px;
   border: 1px solid var(--accent-line);
 }
+
 .rv-evidence-link[href]:hover {
   background: var(--accent-dim);
 }
+
 .rv-evidence-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* evidence link — disabled look */
 .rv-evidence-disabled {
   font-size: 11.5px;
@@ -5285,23 +6038,27 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   cursor: default;
 }
+
 .rv-evidence-error {
   color: var(--fg);
   border-color: color-mix(in oklch, var(--danger) 35%, transparent);
   background: color-mix(in oklch, var(--danger) 12%, transparent);
   cursor: default;
 }
+
 .rv-error-evidence {
   display: inline-flex;
   margin-left: 8px;
   vertical-align: middle;
 }
+
 /* layout: file list (left) + diff body (right) */
 .rv-layout {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
+
 .rv-filelist {
   width: 180px;
   flex: none;
@@ -5309,11 +6066,13 @@ select.dlg-input {
   border-right: 1px solid var(--line-soft);
   padding: 4px 0;
 }
+
 .rv-filelist ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
+
 .rv-filerow {
   display: flex;
   align-items: center;
@@ -5328,30 +6087,36 @@ select.dlg-input {
   color: var(--fg-muted);
   min-height: 24px;
 }
+
 .rv-filerow:hover {
   background: var(--card-2);
 }
+
 .rv-filerow[aria-pressed="true"] {
   background: var(--accent-dim);
   color: var(--fg);
 }
+
 /* focus-visible ring on file-row buttons */
 .rv-filerow:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: 4px;
 }
+
 .rv-filerow-path {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* diff body */
 .rv-body {
   flex: 1;
   overflow: auto;
 }
+
 /* apply controls */
 .rv-controls {
   display: flex;
@@ -5360,11 +6125,13 @@ select.dlg-input {
   padding: 8px 12px;
   border-top: 1px solid var(--line-soft);
 }
+
 .rv-apply-status {
   font-size: 11.5px;
   color: var(--fg-muted);
   flex: 1;
 }
+
 .rv-apply-error {
   font-size: 11.5px;
   color: var(--fg);
@@ -5373,6 +6140,7 @@ select.dlg-input {
   background: color-mix(in oklch, var(--danger) 16%, transparent);
   border: 1px solid color-mix(in oklch, var(--danger) 30%, transparent);
 }
+
 /* "Applied" terminal badge — solid accent pill matches .arun-btn.primary contrast ≥6:1 (WCAG 1.4.3) */
 .rv-final {
   font-size: 12px;
@@ -5382,21 +6150,26 @@ select.dlg-input {
   background: var(--accent);
   border: 1px solid var(--accent);
 }
+
 /* truncation note */
 .rv-truncated {
-  margin: 0; /* p — UA margin reset (uiux-fix F023 C267) */
+  margin: 0;
+  /* p — UA margin reset (uiux-fix F023 C267) */
   padding: 8px 12px;
   font-size: 11.5px;
   color: var(--fg-muted);
   border-top: 1px solid var(--line-soft);
 }
+
 .rv-truncated a {
   color: var(--accent-text);
 }
+
 .rv-truncated a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* empty state */
 .rv-empty {
   display: flex;
@@ -5408,17 +6181,20 @@ select.dlg-input {
   padding: 24px;
   text-align: center;
 }
+
 .rv-empty-h {
   font-size: 14px;
   font-weight: 600;
   color: var(--fg-muted);
   margin: 0;
 }
+
 .rv-empty-p {
   font-size: 12.5px;
   color: var(--fg-muted);
   margin: 0;
 }
+
 /* loading skeleton */
 .rv-loading {
   padding: 12px;
@@ -5426,20 +6202,24 @@ select.dlg-input {
   flex-direction: column;
   gap: 8px;
 }
+
 .rv-skel {
   height: 14px;
   border-radius: 6px;
   background: var(--inset);
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .rv-skel {
     animation: pulse 1.4s ease-in-out infinite;
   }
 }
+
 .rv-skel-sm {
   width: 60%;
 }
+
 /* error state */
 .rv-error {
   margin: 12px;
@@ -5450,18 +6230,22 @@ select.dlg-input {
   font-size: 12.5px;
   border: 1px solid color-mix(in oklch, var(--danger) 30%, transparent);
 }
+
 /* no-diff message */
 .rv-no-diff {
-  margin: 0; /* p — UA margin reset (uiux-fix F023 C267) */
+  margin: 0;
+  /* p — UA margin reset (uiux-fix F023 C267) */
   padding: 16px 12px;
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 /* focus ring on .arun-btn globally (WCAG 2.4.7) — previously scoped to .rv-controls only */
 .arun-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* focus rings for nav rail icon buttons (WCAG 2.4.7) — .rail-avatar added (uiux-fix F014 C016) */
 .rail-btn:focus-visible,
 .rail-new:focus-visible,
@@ -5469,6 +6253,7 @@ select.dlg-input {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* focus rings for header toolbar buttons (WCAG 2.4.7).
    uiux-fix F050 C403: no border-radius here — the blanket 8px visibly snapped
    .edm-trigger (9px) and .modesw-opt (7px) corners on keyboard focus; the
@@ -5480,6 +6265,7 @@ select.dlg-input {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* Syntax token classes from syntaxHighlight.ts — REVIEW DIFF variant, scoped to .rv-src.
    uiux-fix F021 C094: unscoped, this later var-based block overrode the FilePreview material
    palette (line ~2965) in dark theme with equal specificity — keywords/strings/numbers all
@@ -5489,38 +6275,49 @@ select.dlg-input {
   color: var(--fg-dim);
   font-style: italic;
 }
+
 .rv-src .hl-str {
   color: var(--ok);
 }
+
 .rv-src .hl-num {
   color: var(--accent);
 }
+
 .rv-src .hl-lit {
   color: var(--accent);
 }
+
 .rv-src .hl-key {
   color: var(--accent);
   font-weight: 600;
 }
+
 .rv-src .hl-type {
   color: var(--fg);
 }
+
 .rv-src .hl-fn {
   color: var(--fg-muted);
 }
+
 .rv-src .hl-key2 {
   color: var(--fg);
 }
+
 .rv-src .hl-punct {
   color: var(--fg-dim);
 }
+
 .rv-src .hl-head {
   color: var(--fg);
   font-weight: 600;
 }
+
 .rv-src .hl-id {
   color: var(--fg-muted);
 }
+
 .rv-src .hl-ws {
   white-space: pre;
 }
@@ -5538,12 +6335,14 @@ select.dlg-input {
   flex-direction: column;
   gap: 8px;
 }
+
 /* Terminal widget — bounded exec surface (ADR-0018) */
 .tm-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .tm-field {
   display: flex;
   flex-direction: column;
@@ -5552,6 +6351,7 @@ select.dlg-input {
   font-weight: 500;
   color: var(--fg-muted);
 }
+
 .tm-field input,
 .tm-field select {
   background: var(--card);
@@ -5563,22 +6363,26 @@ select.dlg-input {
   outline: none;
   font-family: var(--font-ui);
 }
+
 .tm-field input:focus,
 .tm-field select:focus {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
+
 .tm-field input::placeholder {
   /* --fg-faint = 2.34:1 dark / 3.10:1 light on the --card input bg, AA fail —
      same placeholder convention as .cmp-input (uiux-fix F036 C257) */
   color: var(--fg-muted);
 }
+
 .tm-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 2px;
 }
+
 /* B1 — tm-action: min-height/width ≥ 24px (WCAG 2.5.8), focus-visible ring (WCAG 2.4.7) */
 .tm-action {
   padding: 6px 14px;
@@ -5592,32 +6396,39 @@ select.dlg-input {
   font-weight: 550;
   cursor: pointer;
 }
+
 .tm-action:hover:not(:disabled) {
   background: var(--card-2);
   color: var(--fg);
   border-color: var(--line-strong);
 }
+
 .tm-action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .tm-action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .tm-action[data-primary="true"] {
   background: var(--accent);
   color: var(--ink-inverse);
   border-color: var(--accent);
 }
+
 .tm-action[data-primary="true"]:hover:not(:disabled) {
   filter: brightness(1.06);
 }
+
 .tm-limits {
   font-size: 11px;
   color: var(--fg-dim);
   margin: 0;
 }
+
 /* B1 — tm-error: accessible alert with border using --line-strong (≥ 3:1), danger color */
 .tm-error {
   display: flex;
@@ -5630,9 +6441,11 @@ select.dlg-input {
   color: var(--fg);
   font-size: 12.5px;
 }
+
 .tm-error-text {
   flex: 1;
 }
+
 .tm-error-dismiss {
   flex: none;
   min-height: 24px;
@@ -5642,26 +6455,31 @@ select.dlg-input {
   border-radius: 6px;
   color: var(--fg-dim);
 }
+
 .tm-error-dismiss:hover {
   color: var(--fg);
   background: var(--card-2);
 }
+
 .tm-error-dismiss:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* B1 — tm-result: live region container */
 .tm-result {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .tm-badges {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
+
 /* B1 — badge contrast: ok uses --accent (#4EBA87) on --inset (dark bg) ≈ 5.5:1 PASS;
    fail uses var(--danger): dark oklch(0.68 0.16 25) ≈ 5.6:1 on the tint; light picks up
    the AA --danger override — the old oklch(0.65 0.16 25) hardcode bypassed it, 2.2:1
@@ -5677,21 +6495,25 @@ select.dlg-input {
   border: 1px solid var(--line-strong);
   color: var(--fg-muted);
 }
+
 .tm-badge-ok {
   background: color-mix(in oklch, var(--ok) 18%, var(--inset));
   border-color: var(--accent-line);
   color: var(--accent-text);
 }
+
 .tm-badge-fail {
   background: color-mix(in oklch, var(--danger) 18%, var(--inset));
   border-color: color-mix(in oklch, var(--danger) 45%, transparent);
   color: var(--danger);
 }
+
 .tm-badge-warn {
   background: color-mix(in oklch, var(--warn) 18%, var(--inset));
   border-color: color-mix(in oklch, var(--warn) 45%, transparent);
   color: var(--warn);
 }
+
 /* B1 — stdout/stderr: pre-formatted mono, bounded height, readable */
 .tm-stdout,
 .tm-stderr {
@@ -5709,10 +6531,12 @@ select.dlg-input {
   overflow-x: auto;
   max-height: 16rem;
 }
+
 .tm-stderr {
   border-color: color-mix(in oklch, var(--danger) 40%, transparent);
   color: var(--fg-muted);
 }
+
 /* B1 — event log */
 .tm-events {
   list-style: none;
@@ -5722,6 +6546,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 2px;
 }
+
 .tm-event {
   display: flex;
   align-items: center;
@@ -5730,9 +6555,11 @@ select.dlg-input {
   border-radius: 6px;
   font-size: 11.5px;
 }
+
 .tm-event:hover {
   background: var(--card);
 }
+
 .tm-event-kind {
   font-size: 10.5px;
   font-weight: 700;
@@ -5741,20 +6568,24 @@ select.dlg-input {
   color: var(--fg-dim);
   min-width: 72px;
 }
+
 .tm-event-detail {
   color: var(--fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* B4 — wrap transitions in prefers-reduced-motion so they don't run for users who opt out */
 @media (prefers-reduced-motion: no-preference) {
+
   .tm-field input,
   .tm-field select {
     transition:
       border-color 0.12s,
       box-shadow 0.12s;
   }
+
   .tm-action {
     transition:
       background 0.12s,
@@ -5770,6 +6601,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 6px;
 }
+
 .integ-row {
   display: flex;
   align-items: center;
@@ -5779,6 +6611,7 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   text-align: left;
 }
+
 /* uiux-fix F023 C054/C380 — rows are non-interactive list items (no real integrations
    yet): hover/“connected” affordances removed so nothing suggests a clickable toggle. */
 .integ-glyph {
@@ -5792,6 +6625,7 @@ select.dlg-input {
   color: var(--fg-muted);
   flex: none;
 }
+
 .integ-text {
   flex: 1;
   display: flex;
@@ -5799,14 +6633,17 @@ select.dlg-input {
   gap: 1px;
   min-width: 0;
 }
+
 .integ-name {
   font-size: 13px;
   color: var(--fg);
   font-weight: 500;
 }
+
 .integ-desc {
   font-size: 11.5px;
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
 }
 
 /* ---------- FIRST-RUN GATEWAY SETUP ---------- */
@@ -5818,14 +6655,13 @@ select.dlg-input {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(
-      circle at 50% 12%,
+    radial-gradient(circle at 50% 12%,
       color-mix(in oklch, var(--accent) 20%, transparent),
-      transparent 34%
-    ),
+      transparent 34%),
     oklch(0.08 0.004 160 / 0.78);
   backdrop-filter: blur(12px);
 }
+
 .gw-setup {
   width: min(560px, 100%);
   display: flex;
@@ -5842,11 +6678,13 @@ select.dlg-input {
   box-shadow: var(--shadow-pop);
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .gw-setup {
     animation: fadeUp 0.22s ease-out;
   }
 }
+
 .gw-setup-badge {
   display: inline-flex;
   align-items: center;
@@ -5860,18 +6698,21 @@ select.dlg-input {
   font-size: 12px;
   font-weight: 650;
 }
+
 .gw-setup h1 {
   margin: 2px 0 0;
   font-size: clamp(24px, 4vw, 34px);
   letter-spacing: -0.04em;
   line-height: 1;
 }
+
 .gw-setup p {
   margin: 0;
   color: var(--fg-muted);
   line-height: 1.55;
   font-size: 14px;
 }
+
 .gw-field {
   display: flex;
   flex-direction: column;
@@ -5880,6 +6721,7 @@ select.dlg-input {
   font-size: 12px;
   font-weight: 650;
 }
+
 .gw-input {
   width: 100%;
   border: 1px solid var(--line-strong);
@@ -5890,17 +6732,21 @@ select.dlg-input {
   outline: none;
   font-size: 13px;
 }
+
 .gw-input:focus {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 .gw-input::placeholder {
   color: var(--fg-faint);
 }
+
 .gw-textarea {
   min-height: 82px;
   resize: vertical;
 }
+
 .gw-note {
   padding: 10px 12px;
   border-radius: var(--radius);
@@ -5910,6 +6756,7 @@ select.dlg-input {
   font-size: 12px;
   line-height: 1.45;
 }
+
 .gw-error,
 .gw-success {
   padding: 11px 12px;
@@ -5918,22 +6765,26 @@ select.dlg-input {
   font-size: 12.5px;
   line-height: 1.45;
 }
+
 .gw-error {
   color: var(--fg);
   background: color-mix(in oklch, var(--danger) 22%, var(--card));
   border-color: color-mix(in oklch, var(--danger) 48%, transparent);
 }
+
 .gw-success {
   color: var(--accent-text);
   background: var(--accent-dim);
   border-color: var(--accent-line);
 }
+
 .gw-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
+
 .gw-cancel {
   min-height: 44px;
   padding: 0 18px;
@@ -5943,14 +6794,17 @@ select.dlg-input {
   background: var(--card);
   font-weight: 650;
 }
+
 .gw-cancel:hover:not(:disabled) {
   color: var(--fg);
   background: var(--card-2);
 }
+
 .gw-cancel:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .gw-submit {
   min-height: 44px;
   padding: 0 20px;
@@ -5960,9 +6814,11 @@ select.dlg-input {
   font-weight: 750;
   letter-spacing: -0.01em;
 }
+
 .gw-submit:hover:not(:disabled) {
   filter: brightness(1.06);
 }
+
 .gw-submit:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -6037,6 +6893,7 @@ select.dlg-input {
   outline: 2px solid var(--ink-inverse);
   outline-offset: 1px;
 }
+
 .scope-connect-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -6096,12 +6953,14 @@ select.dlg-input {
   flex-direction: column;
   gap: 8px;
 }
+
 .grounded-citations-wrap {
   display: flex;
   flex-direction: column;
   gap: 4px;
   margin-top: 4px;
 }
+
 .grounded-citations {
   display: flex;
   flex-wrap: wrap;
@@ -6110,10 +6969,12 @@ select.dlg-input {
   padding: 0;
   list-style: none;
 }
+
 .grounded-citations-item {
   display: inline-flex;
   margin: 0;
 }
+
 .grounded-citations-label {
   font-size: 10px;
   font-weight: 700;
@@ -6124,6 +6985,7 @@ select.dlg-input {
      keep the hierarchy. */
   color: var(--fg-muted);
 }
+
 .grounded-citation {
   display: inline-flex;
   align-items: center;
@@ -6138,6 +7000,7 @@ select.dlg-input {
   font-size: 11px;
   cursor: default;
 }
+
 /* Epic #177 audit: citation score, uncertainty, and meta lines all read meaningful values
    (score number, uncertainty claim, omitted-count). --fg-faint = 2.34:1 and --ink-muted =
    3.89:1 on --card → both fail WCAG 1.4.3 (4.5:1). Align with the labels pattern documented
@@ -6148,15 +7011,18 @@ select.dlg-input {
   color: var(--fg);
   font-size: 10px;
 }
+
 .grounded-uncertainty {
   font-size: 11px;
   color: var(--fg);
   font-style: italic;
 }
+
 .grounded-uncertainty-list {
   margin: 4px 0 0;
   padding-left: 16px;
 }
+
 .grounded-meta {
   font-size: 10px;
   color: var(--fg);
@@ -6179,6 +7045,7 @@ select.dlg-input {
   border-left: 3px solid var(--warn);
   border-radius: 4px;
 }
+
 .grounded-coverage-notice-title {
   font-weight: 600;
   color: var(--fg);
@@ -6197,10 +7064,12 @@ select.dlg-input {
   font-size: 11px;
   font-family: var(--font-mono);
 }
+
 .grounded-context-pack-headline {
   color: var(--fg);
   margin-bottom: 4px;
 }
+
 .grounded-context-pack-dl {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -6208,10 +7077,12 @@ select.dlg-input {
   row-gap: 2px;
   margin: 0;
 }
+
 .grounded-context-pack-dt {
   color: var(--fg);
   font-weight: 500;
 }
+
 .grounded-context-pack-dd {
   color: var(--fg);
   margin: 0;
@@ -6244,13 +7115,16 @@ select.dlg-input {
   border: 1px solid color-mix(in oklab, var(--accent) 70%, #000 30%);
   cursor: pointer;
 }
+
 .grounded-cancel-btn:hover:not(:disabled) {
   filter: brightness(1.06);
 }
+
 .grounded-cancel-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
 .grounded-cancel-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -6271,12 +7145,14 @@ select.dlg-input {
   margin: 0 auto;
   width: 100%;
 }
+
 .lk-header {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
 }
+
 .lk-title {
   font-size: 20px;
   font-weight: 650;
@@ -6301,6 +7177,7 @@ select.dlg-input {
   flex: 1;
   min-width: 0;
 }
+
 .lkd-rename-actions {
   display: flex;
   gap: 8px;
@@ -6316,6 +7193,7 @@ select.dlg-input {
   max-height: 280px;
   overflow-y: auto;
 }
+
 .lk-compose-member-list {
   list-style: none;
   margin: 0;
@@ -6324,6 +7202,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 4px;
 }
+
 .lk-compose-member-label {
   display: flex;
   align-items: center;
@@ -6331,6 +7210,7 @@ select.dlg-input {
   padding: 4px 2px;
   cursor: pointer;
 }
+
 .lk-compose-member-name {
   flex: 1;
   min-width: 0;
@@ -6348,6 +7228,7 @@ select.dlg-input {
   color: var(--danger);
   font-size: 13px;
 }
+
 .lk-alert-retry {
   margin-left: 12px;
   font-size: 12px;
@@ -6383,9 +7264,11 @@ select.dlg-input {
   min-width: 110px;
   text-align: center;
 }
+
 .lk-node[data-connected="true"] {
   border-color: var(--accent-line);
 }
+
 .lk-node-icon {
   width: 40px;
   height: 40px;
@@ -6396,11 +7279,13 @@ select.dlg-input {
   place-items: center;
   font-size: 18px;
 }
+
 .lk-node-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--fg);
 }
+
 .lk-node-sub {
   font-size: 11px;
   color: var(--fg-dim);
@@ -6429,6 +7314,7 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   box-shadow: var(--shadow-card);
 }
+
 .lk-capsule-drag-handle {
   appearance: none;
   border: 0;
@@ -6445,14 +7331,17 @@ select.dlg-input {
   text-align: left;
   cursor: grab;
 }
+
 .lk-capsule-drag-handle:active {
   cursor: grabbing;
 }
+
 .lk-capsule-drag-handle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--radius-xs);
 }
+
 .lk-connector-drag-ghost {
   position: fixed;
   z-index: 10000;
@@ -6468,6 +7357,7 @@ select.dlg-input {
   color: var(--fg);
   box-shadow: var(--shadow-pop);
 }
+
 .lk-connector-drag-ghost-icon {
   width: 30px;
   height: 30px;
@@ -6478,6 +7368,7 @@ select.dlg-input {
   color: var(--accent);
   flex: none;
 }
+
 .lk-connector-drag-ghost-copy {
   min-width: 0;
   display: grid;
@@ -6485,17 +7376,20 @@ select.dlg-input {
   font-size: 12px;
   font-weight: 700;
 }
+
 .lk-connector-drag-ghost-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lk-connector-drag-ghost-copy small {
   color: var(--fg-muted);
   font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
 }
+
 .lk-capsule-icon {
   width: 32px;
   height: 32px;
@@ -6508,10 +7402,12 @@ select.dlg-input {
   flex-shrink: 0;
   font-size: 14px;
 }
+
 .lk-capsule-info {
   flex: 1;
   min-width: 0;
 }
+
 .lk-capsule-name {
   font-size: 13px;
   font-weight: 500;
@@ -6520,6 +7416,7 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lk-capsule-actions {
   display: flex;
   gap: 6px;
@@ -6538,11 +7435,13 @@ select.dlg-input {
      badge below the centre/baseline in flex-aligned rows (compose dialog,
      detail overview). */
 }
+
 .lk-badge[data-state="ready"] {
   background: var(--accent-dim);
   color: var(--fg);
   border: 1px solid var(--accent-line);
 }
+
 /* indexing — warm amber. Dark: --warn (L 0.78) on the dark 22% tint ≈ 5:1;
    light theme keeps the dark amber ink via override at the end of this file
    (uiux-fix F033, C006 — the previous hard-coded dark ink was 1.47:1 in the
@@ -6552,11 +7451,13 @@ select.dlg-input {
   color: var(--warn);
   border: 1px solid color-mix(in oklch, var(--warn) 55%, transparent);
 }
+
 .lk-badge[data-state="stale"] {
   background: color-mix(in oklch, var(--warn) 16%, transparent);
   color: var(--fg-muted);
   border: 1px solid color-mix(in oklch, var(--warn) 40%, transparent);
 }
+
 /* error — danger red. Text uses --fg on the danger tint: --danger on 18%
    danger-over---card computes to ~4.17:1 (< 4.5:1 AA) in dark; --fg ≥7:1
    (uiux-fix F033, C006 — same pairing as .mc-badge-conflicted). */
@@ -6565,6 +7466,7 @@ select.dlg-input {
   color: var(--fg);
   border: 1px solid color-mix(in oklch, var(--danger) 45%, transparent);
 }
+
 .lk-badge[data-state="draft"],
 .lk-badge[data-state="deleting"] {
   background: var(--inset);
@@ -6588,44 +7490,54 @@ select.dlg-input {
     background 0.12s,
     color 0.12s;
 }
+
 .lk-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .lk-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
 .lk-btn-primary {
   background: var(--accent);
   color: var(--ink-inverse);
   border: 1px solid var(--accent);
 }
+
 .lk-btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
 }
+
 .lk-btn-ghost {
   background: var(--card);
   color: var(--fg-muted);
   border: 1px solid var(--line-soft);
 }
+
 .lk-btn-ghost:hover:not(:disabled) {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .lk-btn-danger {
   background: var(--inset);
   color: var(--danger);
   border: 1px solid color-mix(in oklch, var(--danger) 40%, transparent);
 }
+
 .lk-btn-danger:hover:not(:disabled) {
   background: color-mix(in oklch, var(--danger) 14%, var(--inset));
 }
+
 .lk-btn-lg {
   height: 34px;
   padding: 0 16px;
   font-size: 13px;
 }
+
 .lk-btn-xl {
   height: 36px;
   padding: 0 20px;
@@ -6644,15 +7556,18 @@ select.dlg-input {
   border: 1px dashed var(--line);
   text-align: center;
 }
+
 .lk-empty-icon {
   font-size: 36px;
 }
+
 .lk-empty-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--fg);
   margin: 0 0 6px;
 }
+
 .lk-empty-body {
   font-size: 13px;
   color: var(--fg-muted);
@@ -6825,11 +7740,13 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
+
 .lkd-row {
   display: flex;
   align-items: baseline;
   gap: 12px;
 }
+
 .lkd-label {
   font-size: 12px;
   font-weight: 600;
@@ -6837,6 +7754,7 @@ select.dlg-input {
   min-width: 140px;
   flex: none;
 }
+
 .lkd-value {
   font-size: 13px;
   color: var(--fg);
@@ -6854,6 +7772,7 @@ select.dlg-input {
   padding: 0;
   margin: 0;
 }
+
 .lkd-tag {
   font-size: 11px;
   font-weight: 500;
@@ -6913,6 +7832,7 @@ select.dlg-input {
   gap: 12px;
   min-width: 0;
 }
+
 .lkd-source-name {
   font-size: 13px;
   font-weight: 500;
@@ -6922,6 +7842,7 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lkd-source-path {
   max-width: 100%;
   overflow: hidden;
@@ -6931,6 +7852,7 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lkd-source-scope {
   font-size: 11px;
   color: var(--fg-dim);
@@ -6940,41 +7862,51 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   border-radius: 999px;
 }
+
 .lkd-source-coverage {
   display: flex;
   width: 100%;
   border-radius: var(--radius-sm);
 }
+
 .lkd-source-segment {
   display: block;
   height: 100%;
 }
+
 .lkd-source-segment-ok {
   background: var(--ok);
 }
+
 .lkd-source-segment-fail {
   background: var(--danger);
 }
+
 .lkd-source-segment-skip {
   background: var(--fg-dim);
 }
+
 .lkd-source-counts {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
 }
+
 .lkd-count {
   font-size: 11.5px;
   font-weight: 500;
   font-family: var(--font-mono);
 }
+
 .lkd-count-ok {
   color: var(--ok);
 }
+
 .lkd-count-fail {
   color: var(--danger);
 }
+
 .lkd-count-skip {
   color: var(--fg-dim);
 }
@@ -6983,9 +7915,11 @@ select.dlg-input {
 .lkd-diag-list {
   gap: 4px;
 }
+
 .lkd-diag-group-list {
   margin-bottom: 10px;
 }
+
 .lkd-diag-row,
 .lkd-diag-group {
   display: flex;
@@ -6996,18 +7930,22 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
 }
+
 .lkd-diag-group {
   align-items: center;
 }
+
 .lkd-diag-row[data-severity="error"],
 .lkd-diag-group[data-severity="error"] {
   border-color: color-mix(in oklch, var(--danger) 40%, transparent);
   background: color-mix(in oklch, var(--danger) 6%, var(--card));
 }
+
 .lkd-diag-row[data-severity="warning"],
 .lkd-diag-group[data-severity="warning"] {
   border-color: color-mix(in oklch, var(--warn) 40%, transparent);
 }
+
 .lkd-diag-group-count {
   min-width: 36px;
   color: var(--fg);
@@ -7015,21 +7953,26 @@ select.dlg-input {
   font-family: var(--font-mono);
   font-weight: 700;
 }
+
 .lkd-diag-severity {
   font-size: 11px;
   font-weight: 700;
   min-width: 56px;
   flex: none;
 }
+
 .lkd-diag-row[data-severity="error"] .lkd-diag-severity {
   color: var(--danger);
 }
+
 .lkd-diag-row[data-severity="warning"] .lkd-diag-severity {
   color: var(--warn);
 }
+
 .lkd-diag-row[data-severity="info"] .lkd-diag-severity {
   color: var(--info);
 }
+
 .lkd-diag-code {
   font-size: 11px;
   font-family: var(--font-mono);
@@ -7037,16 +7980,19 @@ select.dlg-input {
   min-width: 80px;
   flex: none;
 }
+
 .lkd-diag-message {
   font-size: 12.5px;
   color: var(--fg);
   flex: 1;
   min-width: 0;
 }
+
 .lkd-diag-page {
   font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--fg-muted); /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
+  color: var(--fg-muted);
+  /* --fg-faint 2.3–3.1:1, AA fail (uiux-fix F012) */
   flex: none;
 }
 
@@ -7062,36 +8008,44 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
+
 .lkd-job-status {
   font-size: 11.5px;
   font-weight: 600;
   min-width: 72px;
   flex: none;
 }
+
 .lkd-job-status[data-status="succeeded"] {
   color: var(--ok);
 }
+
 .lkd-job-status[data-status="failed"] {
   color: var(--danger);
 }
+
 .lkd-job-status[data-status="running"] {
   color: var(--warn);
 }
+
 .lkd-job-status[data-status="queued"],
 .lkd-job-status[data-status="cancelled"] {
   color: var(--fg-dim);
 }
+
 .lkd-job-dates {
   font-size: 11.5px;
   color: var(--fg-muted);
   font-family: var(--font-mono);
   flex: 1;
 }
+
 .lkd-job-duration {
   color: var(--fg-muted);
   font-size: 11.5px;
   font-family: var(--font-mono);
 }
+
 .lkd-job-error {
   flex-basis: 100%;
   display: flex;
@@ -7135,9 +8089,11 @@ select.dlg-input {
   background: var(--danger) !important;
   border-color: var(--danger) !important;
 }
+
 .lkd-btn-destructive:hover:not(:disabled) {
   filter: brightness(1.08);
 }
+
 .lkd-btn-destructive:disabled,
 .lkd-btn-destructive[aria-disabled="true"] {
   opacity: 0.45;
@@ -7657,6 +8613,7 @@ select.dlg-input {
 .sm-p {
   margin: 0 0 10px;
 }
+
 .sm-p:last-child {
   margin-bottom: 0;
 }
@@ -7668,18 +8625,23 @@ select.dlg-input {
   color: var(--fg);
   line-height: 1.3;
 }
+
 .sm-h:first-child {
   margin-top: 0;
 }
+
 .sm-h1 {
   font-size: 1.25em;
 }
+
 .sm-h2 {
   font-size: 1.15em;
 }
+
 .sm-h3 {
   font-size: 1.05em;
 }
+
 .sm-h4,
 .sm-h5,
 .sm-h6 {
@@ -7692,10 +8654,12 @@ select.dlg-input {
   margin: 0 0 10px 1.4em;
   padding: 0;
 }
+
 .sm-ul:last-child,
 .sm-ol:last-child {
   margin-bottom: 0;
 }
+
 .sm-li {
   margin-bottom: 3px;
 }
@@ -7755,10 +8719,12 @@ select.dlg-input {
     color 0.1s,
     border-color 0.1s;
 }
+
 .sm-code-copy:hover {
   color: var(--fg);
   border-color: var(--line-strong);
 }
+
 .sm-code-copy:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -7775,6 +8741,7 @@ select.dlg-input {
   line-height: 1.6;
   color: var(--fg);
 }
+
 .sm-pre code {
   font-family: inherit;
   background: none;
@@ -7807,26 +8774,34 @@ select.dlg-input {
   text-underline-offset: 2px;
   word-break: break-all;
 }
+
 .sm-link:hover {
   color: var(--accent);
 }
+
 .sm-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
 }
+
 /* Light theme override: --accent / --accent-bright are tuned for the dark --card and drop
    to ~1.9:1 (link) and ~2.4:1 (hover/outline) on the light theme's white --card, failing
    WCAG 1.4.3 / 1.4.11. Darken to on-brand greens that meet >=4.5:1 (text) and >=3:1 (focus)
    on white. Dark theme keeps --accent-bright (8.78:1 on the dark card) untouched. */
 [data-theme="light"] .sm-link {
-  color: oklch(0.5 0.13 160); /* 5.51:1 on white --card */
+  color: oklch(0.5 0.13 160);
+  /* 5.51:1 on white --card */
 }
+
 [data-theme="light"] .sm-link:hover {
-  color: oklch(0.45 0.13 160); /* 6.74:1 on white --card */
+  color: oklch(0.45 0.13 160);
+  /* 6.74:1 on white --card */
 }
+
 [data-theme="light"] .sm-link:focus-visible {
-  outline-color: oklch(0.5 0.13 160); /* >=3:1 focus indicator on white --card */
+  outline-color: oklch(0.5 0.13 160);
+  /* >=3:1 focus indicator on white --card */
 }
 
 /* Table */
@@ -7836,11 +8811,13 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
 }
+
 .sm-table {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
 }
+
 .sm-table th,
 .sm-table td {
   padding: 6px 12px;
@@ -7848,10 +8825,12 @@ select.dlg-input {
   color: var(--fg);
   text-align: left;
 }
+
 .sm-table th {
   background: var(--card-2);
   font-weight: 600;
 }
+
 .sm-table tr:nth-child(even) td {
   background: var(--inset);
 }
@@ -7944,7 +8923,8 @@ select.dlg-input {
 }
 
 .qi-run-item-selected {
-  background: var(--card-2); /* was --card == window bg, invisible (uiux-fix F036 C280) */
+  background: var(--card-2);
+  /* was --card == window bg, invisible (uiux-fix F036 C280) */
   /* inset shadow, not border-left: a 2px border shifted the row content sideways
      on selection (uiux-fix F049 C340) */
   box-shadow: inset 2px 0 0 var(--accent);
@@ -8057,10 +9037,12 @@ select.dlg-input {
   background: var(--accent-dim);
   color: var(--accent-text);
 }
+
 .qi-quality-mid {
   background: color-mix(in oklch, var(--warn) 20%, transparent);
   color: var(--warn);
 }
+
 .qi-quality-low {
   background: color-mix(in oklch, var(--danger) 22%, transparent);
   color: var(--fg);
@@ -8078,6 +9060,7 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   background: color-mix(in oklch, var(--danger) 10%, var(--card));
 }
+
 .qi-weak-flag-badge {
   display: inline-flex;
   align-items: center;
@@ -8089,9 +9072,11 @@ select.dlg-input {
   letter-spacing: 0.03em;
   color: var(--fg);
 }
+
 .qi-weak-flag-icon {
   color: var(--danger);
 }
+
 .qi-weak-flag-reason {
   margin: 0;
   font-size: 12px;
@@ -8114,16 +9099,19 @@ select.dlg-input {
   padding-top: 10px;
   border-top: 1px solid var(--line-soft);
 }
+
 .qi-coverage-summary {
   margin: 0;
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .qi-coverage-gaps {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .qi-coverage-gap-list {
   display: flex;
   flex-direction: column;
@@ -8132,6 +9120,7 @@ select.dlg-input {
   padding: 0;
   list-style: none;
 }
+
 .qi-coverage-gap-item {
   display: flex;
   align-items: center;
@@ -8143,6 +9132,7 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   background: var(--card);
 }
+
 .qi-coverage-atom-id {
   font-size: 12px;
   color: var(--fg-muted);
@@ -8150,6 +9140,7 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* Requirement excerpt + atom id stack inside a gap item (#790). min-width: 0 lets the
    single-line children ellipsize instead of forcing the badge out of the row. */
 .qi-coverage-gap-req {
@@ -8158,6 +9149,7 @@ select.dlg-input {
   gap: 2px;
   min-width: 0;
 }
+
 .qi-coverage-gap-text {
   font-size: 12px;
   color: var(--fg);
@@ -8165,14 +9157,17 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .qi-cov-covered {
   background: var(--accent-dim);
   color: var(--accent-text);
 }
+
 .qi-cov-weak {
   background: color-mix(in oklch, var(--warn) 20%, transparent);
   color: var(--warn);
 }
+
 .qi-cov-uncovered {
   background: color-mix(in oklch, var(--danger) 22%, transparent);
   color: var(--fg);
@@ -8187,12 +9182,14 @@ select.dlg-input {
   padding-top: 10px;
   border-top: 1px solid var(--line-soft);
 }
+
 .qi-drift-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
+
 /* stale: --warn text on a warn tint (same pairing as .qi-sev-high; AA in both themes). */
 .qi-drift-stale {
   display: flex;
@@ -8202,9 +9199,11 @@ select.dlg-input {
   font-size: 12px;
   color: var(--warn);
 }
+
 .qi-drift-icon-warn {
   font-size: 13px;
 }
+
 /* fresh: accent-text on transparent — accent-text is the WCAG-safe green in both themes. */
 .qi-drift-fresh {
   display: flex;
@@ -8214,9 +9213,11 @@ select.dlg-input {
   font-size: 12px;
   color: var(--accent-text);
 }
+
 .qi-drift-icon-ok {
   font-size: 13px;
 }
+
 .qi-drift-regenerated {
   margin: 0;
   font-size: 12px;
@@ -8285,12 +9286,10 @@ select.dlg-input {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in oklch, var(--fg) 6%, transparent) 50%,
-      transparent 100%
-    );
+    background: linear-gradient(90deg,
+        transparent 0%,
+        color-mix(in oklch, var(--fg) 6%, transparent) 50%,
+        transparent 100%);
     animation: qi-shimmer 1.4s infinite;
   }
 
@@ -8298,6 +9297,7 @@ select.dlg-input {
     from {
       transform: translateX(-100%);
     }
+
     to {
       transform: translateX(100%);
     }
@@ -8312,7 +9312,8 @@ select.dlg-input {
 .install-banner {
   /* Fixed to the bottom of the viewport, above the app footer. */
   position: fixed;
-  bottom: 40px; /* clear the footer (~36px) with 4px gap */
+  bottom: 40px;
+  /* clear the footer (~36px) with 4px gap */
   left: 50%;
   transform: translateX(-50%);
   z-index: 900;
@@ -8337,6 +9338,7 @@ select.dlg-input {
       opacity: 0;
       transform: translateX(-50%) translateY(12px);
     }
+
     to {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
@@ -8451,12 +9453,14 @@ select.dlg-input {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+
 .qi-launcher-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px 16px 16px;
 }
+
 /* Connected-source banner (Epic #270 Slice 1): shown when a Files window is bound to the QI hub. */
 .qi-connected-source {
   display: flex;
@@ -8470,6 +9474,7 @@ select.dlg-input {
      accent hue 160 toward red/pink. oklab interpolates without a hue axis. */
   background: color-mix(in oklab, var(--accent) 12%, var(--card));
 }
+
 .qi-connected-kind {
   font-size: 10px;
   font-weight: 700;
@@ -8477,16 +9482,19 @@ select.dlg-input {
   letter-spacing: 0.04em;
   color: var(--fg);
 }
+
 .qi-connected-path {
   font-size: 11px;
   color: var(--fg);
   word-break: break-all;
 }
+
 .qi-connected-hint {
   font-size: 11px;
   color: var(--fg-muted);
   width: 100%;
 }
+
 /* Multi-source connected list (Epic #729 / Issue #731). */
 .qi-connected-roots {
   list-style: none;
@@ -8497,16 +9505,19 @@ select.dlg-input {
   flex-direction: column;
   gap: 3px;
 }
+
 .qi-connected-root-item {
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
+
 .qi-connected-root-name {
   font-size: 11px;
   font-weight: 600;
   color: var(--fg);
 }
+
 /* Coverage notice (Epic #729 / Issue #730): sources dropped past the 16-source cap, or skipped
    because they ingested to nothing usable. Mirrors .grounded-coverage-notice — text uses --fg
    (16.96:1 on --card-2 in dark, high contrast on near-white --card-2 in light; WCAG 1.4.3) and the
@@ -8523,32 +9534,39 @@ select.dlg-input {
   border-left: 3px solid var(--warn);
   border-radius: 4px;
 }
+
 .qi-coverage-line {
   margin: 0;
   color: var(--fg);
 }
+
 .qi-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .qi-field-inline {
   flex-direction: row;
   align-items: center;
   gap: 8px;
 }
+
 .qi-launcher-row {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
-.qi-launcher-row > .qi-field:first-child {
+
+.qi-launcher-row>.qi-field:first-child {
   flex: 1;
   min-width: 220px;
 }
+
 .qi-field-kind {
   min-width: 160px;
 }
+
 .qi-field-label {
   font-size: 11px;
   font-weight: 600;
@@ -8556,6 +9574,7 @@ select.dlg-input {
   letter-spacing: 0.04em;
   color: var(--fg-muted);
 }
+
 .qi-input,
 .qi-textarea,
 .qi-select {
@@ -8568,11 +9587,13 @@ select.dlg-input {
   font-size: 13px;
   font-family: inherit;
 }
+
 .qi-textarea {
   resize: vertical;
   min-height: 96px;
   line-height: 1.5;
 }
+
 .qi-input:focus-visible,
 .qi-textarea:focus-visible,
 .qi-select:focus-visible {
@@ -8580,6 +9601,7 @@ select.dlg-input {
   outline-offset: 1px;
   border-color: var(--accent);
 }
+
 .qi-launcher-controls {
   display: flex;
   align-items: flex-end;
@@ -8587,6 +9609,7 @@ select.dlg-input {
   gap: 12px;
   flex-wrap: wrap;
 }
+
 .qi-btn {
   min-height: 32px;
   min-width: 64px;
@@ -8604,38 +9627,49 @@ select.dlg-input {
     color 0.12s,
     border-color 0.12s;
 }
+
 .qi-btn:hover:not(:disabled) {
   border-color: var(--line-strong);
 }
+
 .qi-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .qi-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 .qi-btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--ink-inverse); /* was hardcoded #06120c (uiux-fix F049 C338) */
+  color: var(--ink-inverse);
+  /* was hardcoded #06120c (uiux-fix F049 C338) */
 }
+
 .qi-btn-secondary {
   background: transparent;
 }
+
 .qi-btn-approve {
   color: var(--accent-bright);
   border-color: color-mix(in oklch, var(--accent) 50%, var(--line));
 }
+
 .qi-btn-approve[aria-pressed="true"] {
   background: var(--accent);
-  color: var(--ink-inverse); /* was hardcoded #06120c (uiux-fix F049 C338) */
+  color: var(--ink-inverse);
+  /* was hardcoded #06120c (uiux-fix F049 C338) */
 }
+
 .qi-btn-reject {
   color: #f2a4a0;
   /* was hardcoded #d9534f; var(--danger) keeps the light-theme darkening (uiux-fix F049 C338) */
   border-color: color-mix(in oklch, var(--danger) 45%, var(--line));
 }
+
 .qi-btn-reject[aria-pressed="true"] {
   /* was hardcoded #b23b37; the 75% mix measures 6.11:1 (dark) / 10.93:1 (light)
      against the white ink — both AA (uiux-fix F049 C338) */
@@ -8643,6 +9677,7 @@ select.dlg-input {
   border-color: color-mix(in oklch, var(--danger) 75%, black);
   color: #fff;
 }
+
 .qi-progress {
   display: flex;
   align-items: center;
@@ -8650,6 +9685,7 @@ select.dlg-input {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .qi-progress-spinner {
   width: 12px;
   height: 12px;
@@ -8658,16 +9694,19 @@ select.dlg-input {
   border-radius: 50%;
   animation: qi-spin 0.8s linear infinite;
 }
+
 @keyframes qi-spin {
   to {
     transform: rotate(360deg);
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .qi-progress-spinner {
     animation: none;
   }
 }
+
 /* Candidate review surface */
 .qi-col-subtitle {
   display: flex;
@@ -8681,6 +9720,7 @@ select.dlg-input {
   margin: 0;
   padding: 0;
 }
+
 .qi-cand-cards {
   list-style: none;
   margin: 0;
@@ -8690,6 +9730,7 @@ select.dlg-input {
   gap: 10px;
   align-items: start;
 }
+
 .qi-cand-card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -8698,9 +9739,11 @@ select.dlg-input {
   display: flex;
   flex-direction: column;
 }
+
 .qi-cand-card-editing {
   grid-column: 1 / -1;
 }
+
 .qi-cand-header {
   display: flex;
   align-items: flex-start;
@@ -8708,6 +9751,7 @@ select.dlg-input {
   gap: 10px;
   margin-bottom: 8px;
 }
+
 .qi-cand-title {
   font-size: 13px;
   font-weight: 600;
@@ -8715,12 +9759,14 @@ select.dlg-input {
   margin: 0;
   line-height: 1.4;
 }
+
 .qi-cand-badges {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
+
 .qi-cand-pri,
 .qi-cand-risk {
   font-size: 10px;
@@ -8732,9 +9778,11 @@ select.dlg-input {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+
 .qi-cand-block {
   margin-top: 8px;
 }
+
 .qi-cand-block-label {
   font-size: 10px;
   font-weight: 700;
@@ -8743,6 +9791,7 @@ select.dlg-input {
   color: var(--fg-muted);
   margin: 0 0 3px;
 }
+
 .qi-cand-list {
   margin: 0;
   padding-left: 18px;
@@ -8753,6 +9802,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 2px;
 }
+
 .qi-cand-tags {
   list-style: none;
   margin: 10px 0 0;
@@ -8761,6 +9811,7 @@ select.dlg-input {
   flex-wrap: wrap;
   gap: 4px;
 }
+
 .qi-cand-tag {
   font-size: 10px;
   padding: 2px 6px;
@@ -8768,28 +9819,33 @@ select.dlg-input {
   background: var(--card-2);
   color: var(--fg-muted);
 }
+
 .qi-cand-actions {
   display: flex;
   gap: 6px;
   margin-top: 12px;
   flex-wrap: wrap;
 }
+
 .qi-cand-governance-note {
   margin: 0 0 10px;
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .qi-edit-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-width: 760px;
 }
+
 .qi-edit-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .qi-edit-label {
   font-size: 10px;
   font-weight: 700;
@@ -8797,6 +9853,7 @@ select.dlg-input {
   letter-spacing: 0.04em;
   color: var(--fg-muted);
 }
+
 .qi-edit-input,
 .qi-edit-textarea,
 .qi-edit-select {
@@ -8810,11 +9867,13 @@ select.dlg-input {
   font-family: inherit;
   box-sizing: border-box;
 }
+
 .qi-edit-textarea {
   resize: vertical;
   min-height: 72px;
   line-height: 1.45;
 }
+
 .qi-edit-input:focus-visible,
 .qi-edit-textarea:focus-visible,
 .qi-edit-select:focus-visible {
@@ -8822,6 +9881,7 @@ select.dlg-input {
   outline-offset: 1px;
   border-color: var(--accent);
 }
+
 .qi-edit-actions {
   display: flex;
   gap: 8px;
@@ -8834,16 +9894,19 @@ select.dlg-input {
   background: var(--card);
   border-bottom: 1px solid var(--line-soft);
 }
+
 .qi-edit-error {
   margin: 0;
   font-size: 12px;
   color: var(--danger);
 }
+
 .qi-cand-more,
 .qi-show-more {
   margin: 12px 0 0;
   justify-self: start;
 }
+
 .qi-review-badge {
   font-size: 10px;
   font-weight: 700;
@@ -8852,6 +9915,7 @@ select.dlg-input {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+
 /* Review badges: opaque tinted backgrounds + primary --fg text so contrast holds in BOTH themes
    (the tint differentiates state; --fg on a mostly-card background is high-contrast either way).
    Mixed in oklab, not oklch: light --card oklch(1 0 0) has hue 0, and oklch interpolation
@@ -8860,29 +9924,35 @@ select.dlg-input {
   background: color-mix(in oklab, var(--fg-muted) 26%, var(--card));
   color: var(--fg);
 }
+
 .qi-review-approved {
   background: color-mix(in oklab, var(--accent) 32%, var(--card));
   color: var(--fg);
 }
+
 .qi-review-changes {
   /* was hardcoded #d8a657 (uiux-fix F049 C338) */
   background: color-mix(in oklab, var(--warn) 38%, var(--card));
   color: var(--fg);
 }
+
 .qi-review-rejected {
   /* was hardcoded #d9534f (uiux-fix F049 C338) */
   background: color-mix(in oklab, var(--danger) 38%, var(--card));
   color: var(--fg);
 }
+
 .qi-review-withdrawn {
   background: var(--card-2);
   color: var(--fg);
 }
+
 /* Light theme: the small priority/risk pills use the strong text colour for 4.5:1 (a11y M2). */
 [data-theme="light"] .qi-cand-pri,
 [data-theme="light"] .qi-cand-risk {
   color: var(--fg);
 }
+
 /* Export control */
 .qi-export {
   display: flex;
@@ -8890,6 +9960,7 @@ select.dlg-input {
   gap: 8px;
   flex-wrap: wrap;
 }
+
 .qi-export-preview {
   width: 100%;
   max-height: 220px;
@@ -8905,6 +9976,7 @@ select.dlg-input {
   margin: 8px 0 0;
   font-family: var(--font-mono, monospace);
 }
+
 .qi-export-hint {
   width: 100%;
   margin: 6px 0 0;
@@ -8912,6 +9984,7 @@ select.dlg-input {
   line-height: 1.4;
   color: var(--fg-muted);
 }
+
 .qi-export-success {
   width: 100%;
   margin: 6px 0 0;
@@ -8929,10 +10002,12 @@ select.dlg-input {
   height: 100%;
   min-height: 0;
 }
+
 .qi-hub .qi-launcher {
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
 }
+
 .qi-hub-runs {
   display: flex;
   flex-direction: column;
@@ -8947,6 +10022,7 @@ select.dlg-input {
   height: 100%;
   min-height: 0;
 }
+
 .qi-run-card-head {
   flex-shrink: 0;
   /* 12px 16px = .qi-col-header grid — hub and run card share one horizontal
@@ -8957,6 +10033,7 @@ select.dlg-input {
   align-items: center;
   gap: 8px;
 }
+
 .qi-run-card-head .qi-run-id {
   font-size: 11px;
   color: var(--fg-muted);
@@ -8964,15 +10041,18 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .qi-run-card-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px; /* 16px horizontal = hub grid (uiux-fix F036 C282) */
+  padding: 14px 16px;
+  /* 16px horizontal = hub grid (uiux-fix F036 C282) */
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
 .qi-run-governance {
   display: flex;
   flex-direction: column;
@@ -8982,17 +10062,21 @@ select.dlg-input {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
+
 .qi-run-governance-input {
   max-width: 320px;
 }
+
 .qi-run-governance-help,
 .qi-run-governance-warning {
   margin: 0;
   font-size: 12px;
 }
+
 .qi-run-governance-help {
   color: var(--fg-muted);
 }
+
 .qi-run-governance-warning {
   color: var(--danger);
 }
@@ -9008,11 +10092,13 @@ select.dlg-input {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
+
 .qi-run-summary-item {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
+
 .qi-run-summary-item dt {
   font-size: 10px;
   font-weight: 600;
@@ -9021,11 +10107,13 @@ select.dlg-input {
   color: var(--fg-muted);
   margin: 0;
 }
+
 .qi-run-summary-item dd {
   margin: 0;
   font-size: 12px;
   color: var(--fg);
 }
+
 .qi-run-summary-review {
   /* no text-transform — the review state renders via the shared REVIEW_LABEL map (uiux-fix
      F030 C272); capitalize turned "changes-requested" into "Changes-Requested". */
@@ -9038,6 +10126,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 10px;
 }
+
 .qi-run-cases-head {
   display: flex;
   align-items: center;
@@ -9107,12 +10196,15 @@ select.dlg-input {
   outline-offset: 2px;
   min-width: 0;
 }
+
 .figma-snapshot-input:focus-visible {
   outline: 2px solid var(--accent);
 }
+
 .figma-snapshot-input[aria-invalid="true"] {
   border-color: var(--danger);
 }
+
 .figma-snapshot-input:disabled {
   opacity: 0.6;
 }
@@ -9130,9 +10222,11 @@ select.dlg-input {
   cursor: pointer;
   outline-offset: 2px;
 }
+
 .figma-snapshot-trigger-btn:focus-visible {
   outline: 2px solid var(--accent);
 }
+
 .figma-snapshot-trigger-btn:disabled {
   opacity: 0.5;
   cursor: default;
@@ -9223,6 +10317,7 @@ select.dlg-input {
   cursor: pointer;
   outline-offset: 2px;
 }
+
 .figma-snapshot-load-btn:focus-visible {
   outline: 2px solid var(--accent);
 }
@@ -9266,9 +10361,11 @@ select.dlg-input {
   cursor: pointer;
   outline-offset: 2px;
 }
+
 .figma-snapshot-resnapshot-btn:focus-visible {
   outline: 2px solid var(--accent);
 }
+
 .figma-snapshot-resnapshot-btn:disabled {
   opacity: 0.5;
   cursor: default;
@@ -9285,6 +10382,7 @@ select.dlg-input {
   color: var(--fg-muted);
   cursor: pointer;
 }
+
 .figma-snapshot-consent-checkbox {
   margin-top: 1px;
   width: 16px;
@@ -9302,6 +10400,7 @@ select.dlg-input {
   gap: 8px;
   margin-top: 4px;
 }
+
 .figma-snapshot-codegen-btn {
   align-self: flex-start;
   padding: 5px 14px;
@@ -9314,23 +10413,28 @@ select.dlg-input {
   cursor: pointer;
   outline-offset: 2px;
 }
+
 .figma-snapshot-codegen-btn:focus-visible {
   outline: 2px solid var(--accent);
 }
+
 .figma-snapshot-codegen-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
+
 .figma-snapshot-code-result {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .figma-snapshot-code-summary {
   margin: 0;
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .figma-snapshot-code-file-path {
   cursor: pointer;
   font-family: var(--font-mono, monospace);
@@ -9339,10 +10443,12 @@ select.dlg-input {
   padding: 3px 0;
   outline-offset: 2px;
 }
+
 .figma-snapshot-code-file-path:focus-visible {
   outline: 2px solid var(--accent);
   border-radius: 2px;
 }
+
 .figma-snapshot-code-file-contents {
   margin: 4px 0 0;
   padding: 8px;
@@ -9374,6 +10480,7 @@ select.dlg-input {
   padding: 4px 0;
   outline-offset: 2px;
 }
+
 .figma-snapshot-scopes-summary:focus-visible {
   outline: 2px solid var(--accent);
   border-radius: 2px;
@@ -9466,9 +10573,11 @@ select.dlg-input {
 .tb-status .dot[data-tone="ok"] {
   background: var(--accent-text);
 }
+
 .tb-status .dot[data-tone="warn"] {
   background: var(--warn);
 }
+
 .tb-status .dot[data-tone="danger"] {
   background: var(--danger);
 }
@@ -9476,7 +10585,7 @@ select.dlg-input {
 /* ==== uiux-fix F008: conn-badge label truncation (C074) ==== */
 /* Defensive cap: a long folder basename must not grow the destructive remove-badge into a
    giant click target across the canvas. Full context stays in the badge title/aria-label. */
-.conn-badge > span {
+.conn-badge>span {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -9500,9 +10609,11 @@ select.dlg-input {
   background: oklch(0.1 0.004 160 / 0.55);
   backdrop-filter: blur(2px);
 }
+
 [data-theme="light"] .wf-dialog-overlay {
   background: oklch(0.3 0.01 160 / 0.34);
 }
+
 .wf-dialog {
   position: relative;
   width: 460px;
@@ -9515,11 +10626,13 @@ select.dlg-input {
   box-shadow: var(--shadow-pop);
   padding: 16px 18px;
 }
+
 .wf-dialog-title {
   margin: 0 24px 12px 0;
   font-size: 14px;
   font-weight: 650;
 }
+
 .wf-dialog-close {
   position: absolute;
   top: 10px;
@@ -9534,10 +10647,12 @@ select.dlg-input {
     background 0.15s ease,
     color 0.15s ease;
 }
+
 .wf-dialog-close:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .wf-dialog-list {
   list-style: none;
   margin: 0;
@@ -9546,6 +10661,7 @@ select.dlg-input {
   flex-direction: column;
   gap: 8px;
 }
+
 .wf-dialog-choice {
   display: flex;
   flex-direction: column;
@@ -9561,29 +10677,35 @@ select.dlg-input {
     background 0.15s ease,
     border-color 0.15s ease;
 }
+
 .wf-dialog-choice:hover {
   background: var(--card-2);
   border-color: var(--accent-line);
 }
+
 .wf-dialog-choice-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
 }
+
 .wf-dialog-choice-desc {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .wf-dialog-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
 .wf-dialog-form-desc {
   margin: 0;
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .wf-dialog-field {
   display: flex;
   flex-direction: column;
@@ -9591,6 +10713,7 @@ select.dlg-input {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .wf-dialog-input {
   width: 100%;
   padding: 8px 10px;
@@ -9601,9 +10724,11 @@ select.dlg-input {
   font-size: 12.5px;
   resize: vertical;
 }
+
 .wf-dialog-input:focus {
   border-color: var(--accent-line);
 }
+
 .wf-dialog-error {
   font-size: 12.5px;
   color: var(--danger);
@@ -9612,12 +10737,14 @@ select.dlg-input {
   border-radius: 9px;
   padding: 8px 10px;
 }
+
 .wf-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
 }
+
 .wf-dialog-cancel,
 .wf-dialog-launch {
   padding: 7px 14px;
@@ -9631,21 +10758,26 @@ select.dlg-input {
     background 0.15s ease,
     filter 0.15s ease;
 }
+
 .wf-dialog-cancel:hover {
   background: var(--card-2);
 }
+
 .wf-dialog-launch {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--ink-inverse);
 }
+
 .wf-dialog-launch:hover:not(:disabled) {
   filter: brightness(1.06);
 }
+
 .wf-dialog-launch:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .wf-dialog-choice:focus-visible,
 .wf-dialog-cancel:focus-visible,
 .wf-dialog-launch:focus-visible,
@@ -9654,6 +10786,7 @@ select.dlg-input {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* Run summary card — chat-log card for workflow run system messages.
    Chrome and rhythm mirror .chat-msg-bubble / .chat-msg (14px gap); status
    pill colors mirror .lkd-job-status[data-status]. */
@@ -9667,16 +10800,19 @@ select.dlg-input {
   font-size: 13px;
   line-height: 1.5;
 }
+
 .run-summary-card-head {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
+
 .run-summary-card-workflow {
   font-size: 12px;
   color: var(--fg);
 }
+
 .run-summary-card-status {
   font-size: 11px;
   font-weight: 600;
@@ -9686,34 +10822,43 @@ select.dlg-input {
   border: 1px solid var(--line-soft);
   color: var(--fg-dim);
 }
+
 .run-summary-card-status[data-status="succeeded"] {
   color: var(--ok);
   border-color: color-mix(in oklch, var(--ok) 40%, transparent);
 }
+
 /* --ok #4eba87 on white fails 4.5:1 — reuse the AA accent-text green. */
 [data-theme="light"] .run-summary-card-status[data-status="succeeded"] {
   color: var(--accent-text);
 }
+
 .run-summary-card-status[data-status="failed"] {
   color: var(--danger);
   border-color: color-mix(in oklch, var(--danger) 40%, transparent);
 }
+
 .run-summary-card-status[data-status="running"] {
   color: var(--warn);
   border-color: color-mix(in oklch, var(--warn) 40%, transparent);
 }
+
 .run-summary-card-body p {
   margin: 0 0 4px;
 }
+
 .run-summary-card-body p:last-child {
   margin-bottom: 0;
 }
+
 .run-summary-card-line {
   color: var(--fg);
 }
+
 .run-summary-card-result {
   color: var(--fg-muted);
 }
+
 .run-summary-card-meta {
   font-size: 10px;
   color: var(--fg-faint);
@@ -9730,13 +10875,12 @@ select.dlg-input {
 [data-theme="light"] .cmdk-overlay {
   background: oklch(0.3 0.01 160 / 0.34);
 }
+
 [data-theme="light"] .gw-setup-backdrop {
   background:
-    radial-gradient(
-      circle at 50% 12%,
+    radial-gradient(circle at 50% 12%,
       color-mix(in oklch, var(--accent) 20%, transparent),
-      transparent 34%
-    ),
+      transparent 34%),
     oklch(0.3 0.01 160 / 0.34);
 }
 
@@ -9755,6 +10899,7 @@ select.dlg-input {
   filter: brightness(1.06);
   border-color: var(--accent);
 }
+
 .bw-btn-danger:hover:not(:disabled) {
   border-color: var(--danger);
   background: color-mix(in oklch, var(--danger) 28%, var(--inset));
@@ -9763,6 +10908,7 @@ select.dlg-input {
 /* C153 — align Browser/Agent buttons with the .tm-action hover transition
    (same 0.12s, reduced-motion-gated; see line ~5600). */
 @media (prefers-reduced-motion: no-preference) {
+
   .bw-btn,
   .arun-btn {
     transition:
@@ -9778,16 +10924,20 @@ select.dlg-input {
 .figma-snapshot-trigger-btn:hover:not(:disabled) {
   background: var(--accent-bright);
 }
+
 .figma-snapshot-codegen-btn:hover:not(:disabled) {
   background: var(--accent-bright);
   border-color: var(--accent-bright);
 }
+
 .figma-snapshot-load-btn:hover:not(:disabled),
 .figma-snapshot-resnapshot-btn:hover:not(:disabled) {
   background: var(--card-2);
   border-color: var(--line-strong);
 }
+
 @media (prefers-reduced-motion: no-preference) {
+
   .figma-snapshot-trigger-btn,
   .figma-snapshot-codegen-btn,
   .figma-snapshot-load-btn,
@@ -9825,6 +10975,7 @@ select.dlg-input {
 [data-theme="light"] :focus-visible {
   outline-color: var(--accent-text);
 }
+
 /* .rv-truncated a:focus-visible is (0,2,1) and would beat the blanket override. */
 [data-theme="light"] .rv-truncated a:focus-visible {
   outline-color: var(--accent-text);
@@ -9865,6 +11016,7 @@ select.dlg-input {
   background: var(--danger);
   color: #fff;
 }
+
 [data-theme="light"] .arun-btn.danger:hover {
   background: var(--danger);
 }
@@ -9887,10 +11039,12 @@ select.dlg-input {
   opacity: 0.4;
   cursor: default;
 }
+
 .ws-zoom-btn:disabled:hover {
   background: transparent;
   color: var(--fg-dim);
 }
+
 .win-zbtn:disabled:hover {
   background: transparent;
   color: var(--fg-faint);
@@ -9904,36 +11058,43 @@ select.dlg-input {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 /* C140: UA-default placeholder grey is 3.6:1 on --card in dark — use --fg-muted (pattern .cmp-input::placeholder). */
 .qi-input::placeholder,
 .qi-textarea::placeholder {
   color: var(--fg-muted);
 }
+
 /* C218: Generate uses aria-disabled (stays focusable, reason via aria-describedby) instead of native disabled. */
 .qi-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 /* Keep the blocked primary button visually inert on hover (overrides the enabled hover affordance). */
 .qi-btn-primary[aria-disabled="true"]:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
 }
+
 /* C131: inline field-validation message (seed) — same pattern as .qi-edit-error. */
 .qi-field-error {
   margin: 0;
   font-size: 12px;
   color: var(--danger);
 }
+
 /* C218/C278: muted helper microcopy in the launcher. */
 .qi-field-hint,
 .qi-generate-hint {
   font-size: 11px;
   color: var(--fg-muted);
 }
+
 .qi-generate-hint {
   flex-basis: 100%;
 }
+
 /* C299: the connection layer sits under the windows (z-index 0); when the remove-connection badge
    receives keyboard focus, lift the layer above the window plane so the focused control and its
    focus ring are visible (WCAG 2.4.11). pointer-events stays none on the layer itself, so only the
@@ -9941,6 +11102,7 @@ select.dlg-input {
 .conn-layer:focus-within {
   z-index: 9000;
 }
+
 .conn-badge:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -9952,15 +11114,18 @@ select.dlg-input {
 [data-theme="light"] .mc-badge-proposed {
   color: oklch(0.26 0.012 75);
 }
+
 /* aria-disabled pendant to .lk-btn:disabled — busy buttons stay focusable so
    keyboard focus is not thrown to <body> mid-action (pattern: PR #823). */
 .lk-btn[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .lk-btn[aria-disabled="true"]:hover {
   filter: none;
 }
+
 /* Scroll container for /memoriaviva/consolidation — html,body clip overflow
    globally; result cards below the fold were unreachable (same pattern as
    .lkd-content / .mc-detail). */
@@ -9981,13 +11146,15 @@ select.dlg-input {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 /* C089: the full composer auto-grows with its content (JS sets height up to 220px ≈ 8-9
    lines, then scrolls). The :not(.cmp-box-fill) guard is required — the mini composer
    textarea uses height:100% and must not be capped. */
-.cmp-box:not(.cmp-box-fill) > .cmp-input {
+.cmp-box:not(.cmp-box-fill)>.cmp-input {
   max-height: 220px;
   overflow-y: auto;
 }
+
 /* C138: wrapper for the grounded evidence panel rendered directly in .chatw-log —
    mirrors .chat-msg-bubble chrome + the 14px .chat-msg rhythm so the panel reads
    as part of the assistant turn instead of a naked full-width block. */
@@ -10021,14 +11188,17 @@ select.dlg-input {
     color 0.15s ease,
     border-color 0.15s ease;
 }
+
 .grounded-citations-more:hover {
   color: var(--fg);
   border-color: var(--line-strong);
 }
+
 .grounded-citations-more:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* C137 — a single over-long path/label chip (deep repo paths, long capsule labels)
    must not force a horizontal scrollbar on the whole chat log (.chatw-scroll is
    overflow: auto). The title attribute already carries the full value, so middle
@@ -10036,13 +11206,15 @@ select.dlg-input {
 .grounded-citation {
   max-width: 100%;
 }
-.grounded-citation > span:first-child {
+
+.grounded-citation>span:first-child {
   min-width: 0;
   max-width: 32ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* C165 — HybridContextPackSummary nests two .grounded-context-pack sections inside
    an outer one: collapse the doubled padding / stacked border-tops into a border-left
    group and de-emphasise the inner headline so "Hybrid:" reads as the parent. */
@@ -10052,6 +11224,7 @@ select.dlg-input {
   border-top: none;
   border-left: 2px solid var(--line-soft);
 }
+
 .grounded-context-pack .grounded-context-pack-headline {
   color: var(--fg-muted);
 }
@@ -10066,6 +11239,7 @@ select.dlg-input {
   opacity: 1;
   transform: translateY(-50%);
 }
+
 /* Hover feedback for the account avatar — mirrors .rail-new:hover */
 .rail-avatar:hover {
   filter: brightness(1.12);
@@ -10082,6 +11256,7 @@ select.dlg-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 /* C128 — .modesw-av/.ft-you use --ink-inverse on --info: correct on the dark
    theme's light info blue (≈8.3:1), but light --info is overridden to a dark
    blue (oklch(0.45 0.15 240)) where the dark ink only reaches ≈3.3:1 — restore
@@ -10105,15 +11280,18 @@ select.dlg-input {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .cmp-budget-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .cmp-budget-count {
   font-variant-numeric: tabular-nums;
 }
+
 .cmp-budget-badge {
   display: inline-flex;
   align-items: center;
@@ -10123,29 +11301,35 @@ select.dlg-input {
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+
 .cmp-budget-badge-low {
   background: var(--accent-dim);
   color: var(--accent);
 }
+
 .cmp-budget-badge-moderate {
   background: color-mix(in oklch, var(--info) 18%, transparent);
   color: var(--info);
 }
+
 .cmp-budget-badge-high {
   background: color-mix(in oklch, var(--warn) 18%, transparent);
   color: var(--warn);
 }
+
 /* exceeded: --fg on the 18% danger tint ≈7.5:1 (same rationale as .qi-badge-failed). */
 .cmp-budget-badge-exceeded {
   background: color-mix(in oklch, var(--danger) 18%, transparent);
   color: var(--fg);
 }
+
 /* Light theme: raw --accent #4eba87 on the 18% accent tint ≈1.97:1 FAIL — ink-inverse
    ≈15:1 (same precedent as [data-theme="light"] .qi-badge-succeeded). --info/--warn/--danger
    are already AA-darkened in the light token block, so moderate/high/exceeded need no override. */
 [data-theme="light"] .cmp-budget-badge-low {
   color: var(--ink-inverse);
 }
+
 /* C321 — the approximate-tokens hint was hover-only (title attribute): sighted keyboard
    users could never reach it. The icon is focusable (tabIndex=0) and reveals a data-tip
    pseudo tooltip on hover AND :focus-visible (rail-tooltip keyboard-parity pattern). */
@@ -10164,10 +11348,12 @@ select.dlg-input {
   font-style: italic;
   cursor: help;
 }
+
 .cmp-budget-info:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .cmp-budget-info[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
@@ -10191,10 +11377,12 @@ select.dlg-input {
   transition: opacity 0.15s ease;
   z-index: 9999;
 }
+
 .cmp-budget-info[data-tip]:hover::after,
 .cmp-budget-info[data-tip]:focus-visible::after {
   opacity: 1;
 }
+
 /* Clear-history button: recognisable secondary chip with a ≥24px target (WCAG 2.5.8). */
 .cmp-budget-clear {
   min-height: 24px;
@@ -10209,41 +11397,50 @@ select.dlg-input {
     background 0.15s ease,
     color 0.15s ease;
 }
+
 .cmp-budget-clear:hover:not(:disabled) {
   background: var(--card-2);
   border-color: var(--line-strong);
   color: var(--fg);
 }
+
 .cmp-budget-clear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .cmp-budget-clear:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 /* C175 — inline two-step confirm + post-clear status note for "Clear history". */
 .cmp-budget-confirm {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
+
 .cmp-budget-confirm-label {
   color: var(--fg);
 }
+
 .cmp-budget-cleared {
   font-size: 11.5px;
   color: var(--fg-muted);
 }
+
 .cmp-budget-alert {
   margin-top: 2px;
 }
+
 /* C169 — pills now keep the × focusable during the in-flight request (aria-disabled
    instead of native disabled, so keyboard focus is not dropped mid-flow). */
 .scope-pill-disconnect[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 /* C326 — connector pills were visually identical to folder pills (modifier class had no
    rules); a subtle info-ward tone shift inside the accent family distinguishes the source
    kind at a glance. ink-inverse stays ≥4.5:1 on the mixed fill in both themes. */
@@ -10261,6 +11458,7 @@ select.dlg-input {
   color: var(--danger);
   background: color-mix(in oklch, var(--danger) 14%, var(--card));
 }
+
 /* C194 — .fpv-code/.ed-code are overflow:auto regions now focusable (tabIndex=0) so
    keyboard users can scroll long content (WCAG 2.1.1, axe scrollable-region-focusable);
    inset ring so the outline survives the scroll container's overflow clipping. */
@@ -10282,6 +11480,7 @@ select.dlg-input {
   align-items: center;
   gap: 8px;
 }
+
 /* scoped: .dlg-input is width:100% globally — inside the flex row the input flexes
    and the Browse button keeps its intrinsic width on the same line */
 .dlg-dirwrap .dlg-input {
@@ -10289,29 +11488,35 @@ select.dlg-input {
   flex: 1;
   min-width: 0;
 }
+
 /* sizing/colors come from .dlg-btn (shared className in NewWindowDialog) */
 .dlg-dirbtn {
   white-space: nowrap;
 }
+
 .dir-picker {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
 .dir-top {
   display: flex;
   gap: 8px;
 }
+
 .dir-top .dir-path {
   width: auto;
   flex: 1;
   min-width: 0;
 }
+
 .dir-roots {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
+
 .dir-chip {
   min-height: 24px;
   padding: 4px 11px;
@@ -10321,14 +11526,17 @@ select.dlg-input {
   color: var(--fg-muted);
   font-size: 12px;
 }
+
 .dir-chip:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .dir-chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .dir-list {
   display: flex;
   flex-direction: column;
@@ -10339,6 +11547,7 @@ select.dlg-input {
   border-radius: var(--radius-sm);
   padding: 4px;
 }
+
 .dir-row {
   display: flex;
   align-items: center;
@@ -10351,24 +11560,29 @@ select.dlg-input {
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .dir-row:hover {
   background: var(--card-2);
   color: var(--fg);
 }
+
 .dir-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .dir-note {
   font-size: 12px;
   color: var(--fg-faint);
   padding: 6px 10px;
 }
+
 .dir-actions {
   display: flex;
   justify-content: flex-end;
   gap: 9px;
 }
+
 /* C086 — same recipe as .gw-error (globals.css ~5959): readable var(--fg) ink on a
    danger-tinted card, 12.5px to match dialog body type instead of inherited 16px */
 .dlg-error,
@@ -10393,16 +11607,20 @@ select.dlg-input {
   .hd-wordmark {
     display: none;
   }
+
   .edm-trigger-label {
     display: none;
   }
 }
+
 @media (max-width: 1000px) {
+
   .header .tb-status,
   .header .tb-btn {
     display: none;
   }
 }
+
 /* C157/C225 — the project tab rendered user content (folder names, arbitrarily
    long) with no truncation: long names pushed the right-hand header controls out
    of the clipped viewport at desktop widths and wrapped onto 2-3 lines at narrow
@@ -10411,11 +11629,13 @@ select.dlg-input {
 .tb-tabs {
   min-width: 0;
 }
+
 .tb-tab {
   min-width: 0;
   white-space: nowrap;
 }
-.tb-tab > span {
+
+.tb-tab>span {
   display: block;
   max-width: 220px;
   overflow: hidden;
@@ -10448,6 +11668,7 @@ select.dlg-input {
   color: var(--fg);
   font-size: 12.5px;
 }
+
 .connector-picker-label {
   font-size: 11px;
   font-weight: 600;
@@ -10455,6 +11676,7 @@ select.dlg-input {
   text-transform: uppercase;
   color: var(--fg-muted);
 }
+
 .connector-picker-select {
   min-height: 28px;
   padding: 6px 9px;
@@ -10465,10 +11687,12 @@ select.dlg-input {
   font-size: 12.5px;
   font-family: var(--font-ui);
 }
+
 .connector-picker-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* status/empty/error are early-return roots WITHOUT the .connector-picker
    container (and .win-body has no padding), so they carry their own padding. */
 .connector-picker-status,
@@ -10481,9 +11705,11 @@ select.dlg-input {
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 .connector-picker-empty p {
   margin: 0;
 }
+
 .connector-picker-error {
   display: flex;
   flex-direction: column;
@@ -10497,9 +11723,11 @@ select.dlg-input {
   color: var(--fg);
   font-size: 12.5px;
 }
+
 .connector-picker-error p {
   margin: 0;
 }
+
 .connector-picker-retry {
   min-height: 24px;
   padding: 3px 10px;
@@ -10511,13 +11739,16 @@ select.dlg-input {
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
+
 .connector-picker-retry:hover {
   border-color: var(--accent-line);
 }
+
 .connector-picker-retry:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .connector-picker-selected {
   display: flex;
   align-items: center;
@@ -10525,6 +11756,7 @@ select.dlg-input {
   font-size: 12px;
   color: var(--accent-text);
 }
+
 /* C263 — non-blocking notice when only the capsule-set fetch failed.
    --warn has an AA light-theme override (oklch 0.43). */
 .connector-picker-notice {
@@ -10532,10 +11764,12 @@ select.dlg-input {
   font-size: 11.5px;
   color: var(--warn);
 }
+
 .connector-picker-footer {
   margin-top: auto;
   padding-top: 4px;
 }
+
 .connector-picker-create-link {
   display: inline-flex;
   align-items: center;
@@ -10548,14 +11782,17 @@ select.dlg-input {
   font-size: 12.5px;
   cursor: pointer;
 }
+
 .connector-picker-create-link:hover {
   text-decoration: underline;
 }
+
 .connector-picker-create-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
+
 .connector-node {
   height: 100%;
   display: grid;
@@ -10567,6 +11804,7 @@ select.dlg-input {
     linear-gradient(180deg, color-mix(in oklch, var(--accent) 10%, transparent), transparent 42%),
     var(--surface);
 }
+
 .connector-node-icon {
   width: 64px;
   height: 64px;
@@ -10578,10 +11816,12 @@ select.dlg-input {
   color: var(--accent);
   box-shadow: var(--shadow-card);
 }
+
 .connector-node-copy {
   min-width: 0;
   align-self: center;
 }
+
 .connector-node-kicker {
   margin: 0 0 5px;
   font-size: 11px;
@@ -10590,6 +11830,7 @@ select.dlg-input {
   text-transform: uppercase;
   color: var(--accent-text);
 }
+
 .connector-node-title {
   margin: 0;
   font-size: 18px;
@@ -10598,6 +11839,7 @@ select.dlg-input {
   color: var(--fg);
   overflow-wrap: anywhere;
 }
+
 .connector-node-id {
   margin: 8px 0 0;
   color: var(--fg-muted);
@@ -10606,6 +11848,7 @@ select.dlg-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .connector-node-manage {
   justify-self: start;
   min-height: 28px;
@@ -10617,9 +11860,11 @@ select.dlg-input {
   font-size: 12px;
   cursor: pointer;
 }
+
 .connector-node-manage:hover {
   border-color: var(--accent-line);
 }
+
 .connector-node-manage:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -10636,12 +11881,14 @@ select.dlg-input {
     overflow-y: auto;
     scrollbar-width: none;
   }
+
   .rail::-webkit-scrollbar {
     display: none;
   }
+
   /* keep the 38px controls rigid so the rail scrolls instead of squashing them;
      .spacer keeps flex:1 (it collapses first, then scrolling kicks in) */
-  .rail > :not(.spacer) {
+  .rail> :not(.spacer) {
     flex: none;
   }
 }
@@ -10660,6 +11907,7 @@ select.dlg-input {
 .sm-code-copy {
   min-width: 58px;
 }
+
 /* Success cue beyond the label swap — --ok is AA-adjusted per theme. */
 .sm-code-copy[data-copied="true"] {
   color: var(--ok);
@@ -10674,6 +11922,7 @@ select.dlg-input {
   outline: 2px solid var(--accent-text);
   outline-offset: 3px;
 }
+
 /* C070/C290 — Settings tabs and the gateway CTA had no hover/focus-visible at all:
    tabs only reacted on click (data-on), keyboard focus fell back to the UA default
    ring, and .set-add had no states while its sibling .arun-btn.primary has both. */
@@ -10681,14 +11930,17 @@ select.dlg-input {
   color: var(--fg);
   background: var(--inset);
 }
+
 .set-tab:focus-visible,
 .set-add:focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }
+
 .set-add:hover {
   filter: brightness(1.06);
 }
+
 /* C287 — Retry action inside the gateway load-error banner (SettingsPanel);
    mirrors .lk-alert-retry incl. its focus ring and >=24px hit target. */
 .gw-error-retry {
@@ -10702,6 +11954,7 @@ select.dlg-input {
   min-height: 24px;
   padding: 2px 6px;
 }
+
 .gw-error-retry:focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
@@ -10714,6 +11967,7 @@ ul.integ {
   list-style: none;
   margin: 0;
 }
+
 /* explicit "Not connected" status chip replaces the misleading +/check affordances */
 .integ-status {
   flex: none;
@@ -10737,11 +11991,13 @@ ul.integ {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .dlg-input:disabled,
 .gw-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
 /* C007: design-system focus ring (pattern .dlg-btn:focus-visible /
    .arun-btn:focus-visible) for controls that only had the UA default ring. */
 .pal-card:focus-visible,
@@ -10753,6 +12009,7 @@ ul.integ {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* C191: machine error code as a small secondary mono line under the human
    message in the gateway error banner (pattern: RelationshipCreateDialog
    denial banner / error-and-denial-ux.md) — never a "CODE: message" prefix. */
@@ -10761,6 +12018,7 @@ ul.integ {
   font-size: 11px;
   color: var(--fg-muted);
 }
+
 /* C007: governance-locked .qi-btn (aria-disabled, CandidatesPane Edit/Approve/
    Reject) must not keep the enabled hover affordance. Same (0,3,0) specificity
    as the base .qi-btn:hover rule — later in file wins; the (0,4,0) primary
@@ -10778,10 +12036,12 @@ ul.integ {
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
+
 .srch-box:focus-within {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
+
 /* C017 — WCAG 2.4.7: .gpref-slider (Settings > Wallpaper opacity) sets
    outline:none and had no :focus-visible rule; keyboard users could change the
    opacity without seeing focus. Same ring pattern as .arun-btn:focus-visible. */
@@ -10812,9 +12072,11 @@ ul.integ {
 .figma-snapshot-scopes-summary:hover {
   color: var(--fg);
 }
+
 .figma-snapshot-code-file-path:hover {
   text-decoration: underline;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .figma-snapshot-scopes-summary {
     transition: color 0.15s ease;
@@ -10829,24 +12091,29 @@ ul.integ {
 [data-theme="light"] .mc-dialog-backdrop {
   background: oklch(0.3 0.01 160 / 0.34);
 }
+
 .mc-dialog {
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   border-radius: var(--radius-lg);
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .mc-dialog-backdrop {
     animation: mc-dialog-fade 0.16s ease;
   }
+
   .mc-dialog {
     animation: mc-dialog-rise 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 }
+
 @keyframes mc-dialog-fade {
   from {
     opacity: 0;
   }
 }
+
 @keyframes mc-dialog-rise {
   from {
     transform: translateY(10px) scale(0.985);
@@ -10866,6 +12133,7 @@ ul.integ {
   gap: 12px;
   padding: 14px;
 }
+
 .fpv-image-card {
   background: var(--inset);
   border: 1px solid var(--line-soft);
@@ -10873,11 +12141,13 @@ ul.integ {
   padding: 8px;
   max-width: 100%;
 }
+
 .fpv-image {
   display: block;
   max-width: 100%;
   height: auto;
 }
+
 .fpv-meta {
   display: flex;
   flex-direction: column;
@@ -10886,19 +12156,23 @@ ul.integ {
   width: 100%;
   max-width: 360px;
 }
+
 .fpv-meta-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 2px 0;
 }
+
 .fpv-meta-row span {
   color: var(--fg-muted);
 }
+
 .fpv-meta-row strong {
   color: var(--fg);
   font-weight: 550;
 }
+
 .fpv-meta-pane {
   flex: 1;
   display: grid;
@@ -10906,6 +12180,7 @@ ul.integ {
   overflow: auto;
   padding: 16px;
 }
+
 .fpv-meta-card {
   display: flex;
   flex-direction: column;
@@ -10916,6 +12191,7 @@ ul.integ {
   border-radius: 9px;
   max-width: 100%;
 }
+
 .fpv-meta-card h3 {
   margin: 0;
   font-size: 13px;
@@ -10923,12 +12199,14 @@ ul.integ {
   color: var(--fg);
   overflow-wrap: anywhere;
 }
+
 .fpv-meta-card p {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--fg-muted);
 }
+
 /* C144/C087 — truncation/highlighting notices rendered as bare 16px UA text between the
    pinned header and the 12.5px code pane. Token-based warn tint covers both themes. */
 .fpv-banner {
@@ -10940,6 +12218,7 @@ ul.integ {
   background: color-mix(in oklch, var(--warn) 12%, var(--surface));
   border-bottom: 1px solid color-mix(in oklch, var(--warn) 40%, var(--line-soft));
 }
+
 /* C087 — files tree async states had no CSS: notes were unstyled, the error Retry button
    inherited the global button reset (bare text, <24px target, no affordance). */
 .files-note {
@@ -10948,9 +12227,11 @@ ul.integ {
   line-height: 1.5;
   color: var(--fg-muted);
 }
+
 .files-warning {
   border-left: 2px solid var(--warn);
 }
+
 .files-error {
   display: flex;
   align-items: center;
@@ -10965,6 +12246,7 @@ ul.integ {
   border: 1px solid color-mix(in oklch, var(--danger) 55%, var(--line-soft));
   border-radius: 9px;
 }
+
 .files-retry {
   flex: none;
   min-height: 24px;
@@ -10979,14 +12261,17 @@ ul.integ {
     background 0.15s ease,
     border-color 0.15s ease;
 }
+
 .files-retry:hover {
   background: var(--card);
   border-color: var(--line);
 }
+
 .files-retry:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* C087 — symlink badge + size column in the tree rows were unstyled UA spans. */
 .tr-badge {
   flex: none;
@@ -10999,11 +12284,13 @@ ul.integ {
   border-radius: 5px;
   padding: 0 5px;
 }
+
 .tr-meta {
   flex: none;
   font-size: 10.5px;
   color: var(--fg-muted);
 }
+
 /* C123 — remaining controls without the app-standard focus ring (UA default ring only).
    Full-width list rows take the inset ring (like .rv-filerow); freestanding controls the
    standard 2px offset ring. */
@@ -11015,6 +12302,7 @@ ul.integ {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .fpv-back:focus-visible,
 .files-root-up:focus-visible,
 .files-root-open:focus-visible,
@@ -11027,16 +12315,19 @@ ul.integ {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 /* C123 — shared Toggle (role=switch): hover feedback + a ≥24px hit area around the 30×18
    pill (transparent ::after, visual size unchanged; WCAG 2.5.8). */
 .auto-toggle:hover {
   border-color: var(--line-strong);
 }
+
 .auto-toggle::after {
   content: "";
   position: absolute;
   inset: -4px -2px;
 }
+
 /* C123 (workspace--visual) — connection remove badges live in their own layer ABOVE the
    windows (the edge lines stay below at z 0): a badge under a window was invisible and
    unclickable, with no other way to detach the connection. .ws-scene is its own stacking
@@ -11059,14 +12350,17 @@ ul.integ {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .files-warning {
   color: var(--warn);
 }
+
 .files-error {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 8px; /* left side is overridden inline with the tree depth */
+  margin: 6px 8px;
+  /* left side is overridden inline with the tree depth */
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -11074,10 +12368,12 @@ ul.integ {
   background: color-mix(in oklch, var(--danger) 14%, var(--inset));
   border: 1px solid color-mix(in oklch, var(--danger) 55%, var(--line-soft));
 }
-.files-error > span {
+
+.files-error>span {
   flex: 1;
   min-width: 0;
 }
+
 .files-retry {
   flex: none;
   padding: 2px 8px;
@@ -11088,9 +12384,11 @@ ul.integ {
   color: var(--fg);
   transition: background 0.15s ease;
 }
+
 .files-retry:hover {
   background: var(--card-2);
 }
+
 /* C130 — symlink badge + size column: chip pattern analog .file-mut/.fpv-lang so the
    badge reads as a status, and the size column recedes behind the file name. */
 .tr-badge {
@@ -11106,6 +12404,7 @@ ul.integ {
   background: var(--inset);
   border: 1px solid var(--line-soft);
 }
+
 .tr-meta {
   flex: none;
   font-size: 11.5px;
@@ -11114,11 +12413,13 @@ ul.integ {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
 /* C216 — file rows render an invisible caret placeholder instead of a hardcoded
    +14px pad, so they stay aligned with sibling folders even if the gap changes. */
 .tr-caret-ghost {
   visibility: hidden;
 }
+
 /* C202/C196 — unreadable symlink rows use aria-disabled (stay focusable, reason via
    aria-describedby) instead of native disabled; visual dead state + no hover/cursor
    affordance (pattern of .files-root-up:disabled). */
@@ -11127,9 +12428,11 @@ ul.integ {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .tr-row[aria-disabled="true"]:hover {
   background: none;
 }
+
 /* C203 — companion to the .files flex column: lets the tree shrink below its
    content height so overflow:auto engages instead of growing .win-body. */
 .files .files-tree {
@@ -11145,6 +12448,7 @@ ul.integ {
 .win-body {
   border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
 }
+
 .window[data-max="true"] .win-body {
   border-radius: 0;
 }
@@ -11170,11 +12474,13 @@ ul.integ {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .win-ico,
 .win-btn,
 .win-traffic {
   flex: none;
 }
+
 .win-zoom {
   flex: 0 1 86px;
   min-width: 0;
@@ -11182,6 +12488,7 @@ ul.integ {
   opacity: 0.72;
   pointer-events: auto;
 }
+
 .win-head:hover .win-zoom,
 .win-zoom:focus-within {
   overflow: visible;
@@ -11212,13 +12519,16 @@ ul.integ {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
 .mc-row-detail-link:hover {
   color: var(--fg);
 }
+
 .mc-row-detail-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .mc-row-detail-link {
     transition: color 0.15s ease;
@@ -11234,6 +12544,7 @@ ul.integ {
   content-visibility: auto;
   contain-intrinsic-size: auto 21.25px;
 }
+
 /* C348 — Retry action inside the preview error state; mirrors .lk-alert-retry /
    .gw-error-retry incl. the >=24px hit target and focus ring. */
 .fpv-retry {
@@ -11247,6 +12558,7 @@ ul.integ {
   min-height: 24px;
   padding: 2px 6px;
 }
+
 .fpv-retry:focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
@@ -11261,41 +12573,50 @@ ul.integ {
   font-size: 12px;
   color: var(--danger);
 }
+
 /* C108 — the read-only acknowledgement is a server-side precondition (HTTP 428 on the
    first build): mark it visibly as required. */
 .figma-snapshot-consent-required {
   font-weight: 600;
 }
+
 /* C247 — busy buttons keep focus (aria-disabled + JS guard instead of native disabled);
    mirror the :disabled visuals and neutralise the C183 hover effect. */
 .figma-snapshot-trigger-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }
+
 .figma-snapshot-trigger-btn[aria-disabled="true"]:hover {
   background: var(--accent);
 }
+
 .figma-snapshot-codegen-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }
+
 .figma-snapshot-codegen-btn[aria-disabled="true"]:hover {
   background: var(--accent);
   border-color: var(--accent);
 }
+
 .figma-snapshot-load-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }
+
 .figma-snapshot-load-btn[aria-disabled="true"]:hover {
   background: var(--card);
   border-color: var(--line);
 }
+
 /* C247 — the board-link input is readOnly (not disabled) while busy so an Enter-submit
    does not drop focus to <body>; keep the dimmed look of the former :disabled state. */
 .figma-snapshot-input[readonly] {
   opacity: 0.6;
 }
+
 /* C213 — first-run empty state: 3-step guidance instead of a half-blank window. */
 .figma-snapshot-empty {
   display: flex;
@@ -11306,12 +12627,14 @@ ul.integ {
   border: 1px dashed var(--line);
   background: var(--card);
 }
+
 .figma-snapshot-empty-title {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
 }
+
 .figma-snapshot-empty-steps {
   margin: 0;
   padding-left: 18px;
@@ -11321,6 +12644,7 @@ ul.integ {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .figma-snapshot-empty-note {
   margin: 0;
   font-size: 12px;
@@ -11355,20 +12679,24 @@ ul.integ {
 [data-theme="light"] .lk-badge[data-state="indexing"] {
   color: oklch(0.26 0.012 75);
 }
+
 /* The 3px offset only belongs to the stacked name+badge column in capsule rows
    (C006 — see .lk-badge base rule). */
 .lk-capsule-info .lk-badge {
   margin-top: 3px;
 }
+
 /* Visual parity with .dlg-overlay: same blur, and a light-theme scrim — the
    Create/Combine dialogs sat behind a much darker backdrop than the confirm
    dialogs on the same route (C036). */
 .mc-dialog-backdrop {
   backdrop-filter: blur(2px);
 }
+
 [data-theme="light"] .mc-dialog-backdrop {
   background: oklch(0.3 0.01 160 / 0.34);
 }
+
 /* Capsule-detail source tools (C065/C104): CapsuleActions no longer renders
    into the .lk-header flex row; it lives in this block below the header. The
    lkd-connect-* classes were referenced by capsule-actions.tsx but never
@@ -11381,60 +12709,72 @@ ul.integ {
   align-items: flex-start;
   flex-shrink: 0;
 }
+
 .lkd-connect-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: min(420px, 100%);
 }
+
 .lkd-connect-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--fg-muted);
 }
+
 .lkd-connect-row {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .lkd-connect-input {
   width: 100%;
 }
+
 .lkd-connect-path-group {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
+
 .lkd-index-row {
   display: flex;
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
 }
+
 .lkd-source-picker {
   width: min(680px, calc(100vw - 40px));
 }
+
 .lkd-source-picker-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 360px;
 }
+
 .lkd-picker-projects {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
+
 .lkd-picker-root {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
 }
+
 .lkd-picker-root .dlg-label {
   grid-column: 1 / -1;
 }
+
 .lkd-picker-current {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -11443,12 +12783,14 @@ ul.integ {
   color: var(--fg-muted);
   font-size: 12px;
 }
+
 .lkd-picker-current .mono {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .lkd-picker-list {
   display: flex;
   flex-direction: column;
@@ -11463,9 +12805,11 @@ ul.integ {
   border-radius: var(--radius-sm);
   background: var(--inset);
 }
+
 .lkd-picker-entry {
   min-width: 0;
 }
+
 .lkd-picker-row {
   width: 100%;
   min-height: 30px;
@@ -11480,16 +12824,20 @@ ul.integ {
   text-align: left;
   cursor: pointer;
 }
+
 .lkd-picker-row:hover:not(:disabled) {
   background: var(--card-2);
 }
+
 .lkd-picker-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .lkd-picker-row input {
   flex: none;
 }
+
 .lkd-picker-empty {
   padding: 10px;
   color: var(--fg-muted);
@@ -11506,6 +12854,7 @@ ul.integ {
   color: var(--ink-inverse);
   border-color: var(--accent);
 }
+
 /* C124: buttons that stay focusable during async work use aria-disabled instead of
    HTML disabled (disabling the focused button drops focus to <body>); mirror each
    widget's :disabled look and neutralise hover feedback while blocked. */
@@ -11513,40 +12862,49 @@ ul.integ {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .arun-btn[aria-disabled="true"]:hover {
   color: var(--fg-muted);
   background: var(--card);
 }
+
 .tm-action[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .tm-action[aria-disabled="true"]:hover {
   background: var(--card);
   color: var(--fg-muted);
   border-color: var(--line);
 }
+
 .tm-action[data-primary="true"][aria-disabled="true"]:hover {
   background: var(--accent);
   color: var(--ink-inverse);
   border-color: var(--accent);
   filter: none;
 }
+
 .bw-btn[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .bw-btn[aria-disabled="true"]:hover {
   border-color: var(--line);
   filter: none;
 }
+
 .bw-btn-danger[aria-disabled="true"]:hover {
   border-color: color-mix(in oklch, var(--danger) 55%, var(--line-soft));
   background: color-mix(in oklch, var(--danger) 18%, var(--inset));
 }
+
 .bw-btn-primary[aria-disabled="true"]:hover {
   border-color: var(--accent);
 }
+
 /* C265: the bare .dot paints no background — idle/terminal Agent runs showed an
    invisible 7px box before the status text. Idle grey + terminal colours via
    data-status; the running state keeps the accent data-live pulse (higher
@@ -11554,14 +12912,17 @@ ul.integ {
 .arun-status .dot {
   background: var(--line-strong);
 }
+
 .arun-status .dot[data-status="failed"],
 .arun-status .dot[data-status="rejected"] {
   background: var(--danger);
 }
+
 .arun-status .dot[data-status="completed"],
 .arun-status .dot[data-status="fix-applied"] {
   background: var(--ok);
 }
+
 /* C266: absolute paths are single unbreakable words — the chip caps at the row
    width and the inner span ellipsises (cf. .rv-filerow-path); the full path stays
    reachable via the title attribute. */
@@ -11569,17 +12930,20 @@ ul.integ {
   max-width: 100%;
   min-width: 0;
 }
+
 .arun-perm-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* C124: machine error codes (INTERNAL, VALIDATION, …) demoted to a small secondary
    detail behind the human message (Terminal/Browser/Review errors). */
 .err-code {
   font-size: 0.9em;
   color: var(--fg-muted);
 }
+
 /* C110: inline run-ID form in the Review empty state (input pattern: inset bg,
    --line border, radius-sm — cf. .bw-input / RelationshipListPanel filter). */
 .rv-empty-form {
@@ -11589,10 +12953,12 @@ ul.integ {
   gap: 8px;
   flex-wrap: wrap;
 }
+
 .rv-empty-label {
   font-size: 12px;
   color: var(--fg-muted);
 }
+
 .rv-runid-input {
   background: var(--inset);
   border: 1px solid var(--line);
@@ -11604,13 +12970,16 @@ ul.integ {
   width: 220px;
   max-width: 100%;
 }
+
 .rv-runid-input::placeholder {
   color: var(--fg-muted);
 }
+
 .rv-runid-input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
 /* ==== uiux-fix F039: cmdk header entry point + boot placeholder (C223/C402) ==== */
 /* C223: clickable ⌘K chip in the header (reuses the shared .kbd optic) so the
    command palette has a visible entry point instead of a hover-only tooltip. */
@@ -11618,6 +12987,7 @@ ul.integ {
   width: auto;
   padding: 0 5px;
 }
+
 /* The shortcut chip is keyboard-centric noise on narrow/touch layouts — collapse it
    alongside the .hd-tool-cta label (cf. the 680px header media query above). */
 @media (max-width: 680px) {
@@ -11625,6 +12995,7 @@ ul.integ {
     display: none;
   }
 }
+
 /* C402: pure-CSS boot placeholder inside the mount gate — the pre-hydration shell
    used to be a completely empty surface with zero loading feedback. Pulse only
    under no-preference (reduced-motion discipline, cf. globals.css.test). */
@@ -11633,22 +13004,27 @@ ul.integ {
   display: grid;
   place-items: center;
 }
+
 .app-boot-logo {
   width: 48px;
   height: 48px;
   opacity: 0.6;
   animation: none;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .app-boot-logo {
     animation: app-boot-pulse 1.8s ease-in-out infinite;
   }
 }
+
 @keyframes app-boot-pulse {
+
   0%,
   100% {
     opacity: 0.35;
   }
+
   50% {
     opacity: 0.75;
   }
@@ -11662,6 +13038,7 @@ ul.integ {
 .qi-hub-runs {
   min-height: 160px;
 }
+
 /* C069 — QiRunCard's gap radar renders a .qi-sr-only span per row as the
    screen-reader text behind the aria-hidden status badge; the class was referenced
    but never defined, so the label rendered twice ("Uncovered Uncovered"). Same
@@ -11677,6 +13054,7 @@ ul.integ {
   white-space: nowrap;
   border-width: 0;
 }
+
 /* C277 — "more available" note under the hub run list when the BFF truncated the
    run list at the route limit. 16px inset = the .qi-col-header horizontal grid. */
 .qi-runs-truncated {
@@ -11696,10 +13074,12 @@ ul.integ {
   color: var(--accent-text);
   border-color: color-mix(in oklch, var(--accent-text) 50%, var(--line));
 }
+
 [data-theme="light"] .qi-btn-reject:not([aria-pressed="true"]) {
   color: var(--danger);
   border-color: color-mix(in oklch, var(--danger) 45%, var(--line));
 }
+
 /* C281 — CandidatesPane wraps Edit + ReviewControls in .qi-cand-actions-row, but the class had
    no rule: Edit sat alone on its own block line with a 12px gap to the review group. One flex
    row with the same 6px gap as .qi-cand-actions; the inner group's margin-top moves up here. */
@@ -11710,9 +13090,11 @@ ul.integ {
   flex-wrap: wrap;
   margin-top: 12px;
 }
+
 .qi-cand-actions-row .qi-cand-actions {
   margin-top: 0;
 }
+
 /* C279 — two-stage discard notice in the candidate edit form ("press Escape/Cancel again"). */
 .qi-edit-discard-note {
   margin: 0;
@@ -11726,6 +13108,7 @@ ul.integ {
 .lk-alert-retry:hover {
   text-decoration-thickness: 2px;
 }
+
 /* C228 — connected pipeline nodes signalled state via border colour alone
    (WCAG 1.4.1). The tick is the second, non-colour cue; sr-only text in the
    node carries the state for assistive tech. */
@@ -11759,13 +13142,16 @@ ul.integ {
     background 0.15s ease,
     border-color 0.15s ease;
 }
+
 .rel-row:hover {
   background: var(--card-2);
 }
+
 .rel-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
 .rel-row[aria-pressed="true"] {
   background: var(--accent-dim);
   border-color: var(--accent-line);
@@ -11784,6 +13170,7 @@ ul.integ {
   font-size: 12.5px;
   color: var(--fg-muted);
 }
+
 /* C170 — the region is permanently mounted (live regions inserted together with
    their first message are unreliably announced) and collapses to zero height
    while it has nothing to say. NOT display:none — hidden live regions are
@@ -11791,6 +13178,7 @@ ul.integ {
 .cmp-send-status:empty {
   padding: 0;
 }
+
 /* C178/C179 — chat scope header, was inline-styled with a 12px inset: classed
    layout on the shared 16px chat inset (.chatw-scroll/.chatw-foot). */
 .chat-scope-header {
@@ -11801,6 +13189,7 @@ ul.integ {
   flex-wrap: nowrap;
   padding: 6px 16px 4px;
 }
+
 /* C178 — grounding control label (was fully inline-styled). */
 .scope-grounding {
   display: inline-flex;
@@ -11809,6 +13198,7 @@ ul.integ {
   flex-wrap: wrap;
   font-size: 12px;
 }
+
 .scope-grounding-label {
   /* WCAG 1.4.3 — 12px chat-scope label; --fg-dim is audited ≥4.5:1 on card surfaces. */
   color: var(--fg-dim);
@@ -11816,26 +13206,32 @@ ul.integ {
     color 0.18s ease,
     text-shadow 0.18s ease;
 }
+
 .scope-grounding[data-connected="true"] .scope-grounding-label {
   color: var(--accent-text);
   text-shadow: 0 0 10px color-mix(in oklch, var(--accent) 30%, transparent);
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .scope-grounding[data-connected="true"] .scope-grounding-label {
     animation: grounding-label-pulse 2.4s ease-in-out infinite;
   }
 }
+
 @keyframes grounding-label-pulse {
+
   0%,
   100% {
     opacity: 1;
     text-shadow: 0 0 7px color-mix(in oklch, var(--accent) 20%, transparent);
   }
+
   50% {
     opacity: 0.82;
     text-shadow: 0 0 13px color-mix(in oklch, var(--accent) 44%, transparent);
   }
 }
+
 /* C178 — the grounding select was the shell's only raw UA <select>, next to the
    chip-styled .cmp-model-select. Pattern: .qi-select; the
    native dropdown arrow is kept so the affordance stays recognizable. */
@@ -11851,18 +13247,22 @@ ul.integ {
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
+
 .scope-grounding-select:hover:not(:disabled) {
   border-color: var(--line);
 }
+
 .scope-grounding-select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
 .scope-grounding-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-color: var(--accent);
 }
+
 .scope-grounding-select option {
   /* explicit pair — Chromium dark option popups honor option CSS (cf. .cmp-model-select option) */
   color: var(--fg);
@@ -11888,10 +13288,12 @@ ul.integ {
   font-weight: 500;
   color: var(--fg);
 }
+
 .qi-run-item .qi-run-id {
   font-size: 11px;
   color: var(--fg-muted);
 }
+
 /* C210 — when a snapshot is blocked on the read-only acknowledgement (inline pre-check or
    server 428 FIGMA_CONSENT_REQUIRED), the checkbox is marked aria-invalid and focused; this
    mirrors .figma-snapshot-input[aria-invalid="true"] so the error visibly points at it. */
@@ -11907,6 +13309,7 @@ ul.integ {
 .attach-drop-zone[data-active="false"] {
   display: none;
 }
+
 /* C324 — document chips: .attach-chip-icon had no rules, so document chips
    collapsed to ~26px next to 40px image chips. The icon well mirrors the
    .attach-chip-thumb 40×40 geometry for equal chip heights. */
@@ -11920,6 +13323,7 @@ ul.integ {
   background: var(--inset);
   color: var(--fg-muted);
 }
+
 /* C177 — sent-documents disclosure (#148) had no rules at all: UA bullets,
    ~40px list indent and 16px default font inside the 12-14px chat log. */
 .sent-docs-note {
@@ -11927,6 +13331,7 @@ ul.integ {
   color: var(--fg-muted);
   margin: 0 0 14px;
 }
+
 .sent-docs-note-list {
   list-style: none;
   margin: 4px 0 0;
@@ -11935,16 +13340,19 @@ ul.integ {
   flex-direction: column;
   gap: 2px;
 }
+
 .sent-docs-note-item {
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
+
 /* --fg-muted (not --fg-faint): de-emphasis via size only, keeps AA contrast. */
 .sent-docs-note-trunc,
 .sent-docs-note-hint {
   font-size: 11px;
   color: var(--fg-muted);
 }
+
 .sent-docs-note-hint {
   display: block;
   margin-top: 4px;
@@ -11957,15 +13365,18 @@ ul.integ {
   .perm-sw {
     transition: background 0.15s;
   }
+
   .perm-sw span,
   .brg-tg span {
     transition:
       left 0.15s,
       background 0.15s;
   }
+
   .ws-fab {
     transition: transform 0.12s;
   }
+
   .rail-btn[data-tip]::after,
   .rail-new[data-tip]::after,
   .rail-avatar[data-tip]::after {
@@ -11974,6 +13385,7 @@ ul.integ {
       transform 0.12s;
   }
 }
+
 /* Firefox scrollbar parity with the ::-webkit-scrollbar theme (thumb --line on
    transparent track). Scoped Firefox-only via @supports (-moz-appearance):
    setting scrollbar-color in Chromium 121+ would disable the richer
@@ -11996,19 +13408,23 @@ ul.integ {
   text-underline-offset: 2px;
   word-break: break-all;
 }
+
 .mc-id-link:hover {
   color: var(--fg);
 }
+
 .mc-id-link:focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
   border-radius: 4px;
 }
+
 @media (prefers-reduced-motion: no-preference) {
   .mc-id-link {
     transition: color 0.15s ease;
   }
 }
+
 /* C010 — connection lines/dots/particles and port rings used raw --accent
    (#4eba87): ~2.1–2.4:1 on the light bg/card, under the 3:1 of WCAG 1.4.11 for
    meaningful graphics (the edge IS the relationship, Epic #532). --accent-text
@@ -12016,10 +13432,12 @@ ul.integ {
 [data-theme="light"] .conn-path {
   stroke: var(--accent-text);
 }
+
 [data-theme="light"] .conn-dot,
 [data-theme="light"] .conn-particle {
   fill: var(--accent-text);
 }
+
 [data-theme="light"] .win-port {
   border-color: var(--accent-text);
 }
@@ -12090,6 +13508,7 @@ ul.integ {
   justify-content: space-between;
   gap: 8px;
 }
+
 .chat-msg-copy {
   min-width: 58px;
   min-height: 24px;
@@ -12108,23 +13527,28 @@ ul.integ {
     color 0.1s,
     border-color 0.1s;
 }
+
 .chat-msg-bubble:hover .chat-msg-copy,
 .chat-msg-bubble:focus-within .chat-msg-copy,
 .chat-msg-copy[data-copied="true"] {
   opacity: 1;
 }
+
 .chat-msg-copy:hover {
   color: var(--fg);
   border-color: var(--line-strong);
 }
+
 .chat-msg-copy:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .chat-msg-copy[data-copied="true"] {
   color: var(--ok);
   border-color: var(--ok);
 }
+
 /* C325 — the in-flight Cancel state (#152) carried the .cmp-send-cancel hook
    with zero rules and rendered in the identical accent look as Send; only the
    icon differed. Neutral chrome separates "stop" from "go"; hover tints toward
@@ -12135,6 +13559,7 @@ ul.integ {
   color: var(--fg);
   border: 1px solid var(--line-strong);
 }
+
 .cmp-send.cmp-send-cancel[data-on]:hover {
   color: var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, var(--card-2));
@@ -12150,12 +13575,14 @@ ul.integ {
     animation: fadePop 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 }
+
 /* C355 — .qi-col-body pads 8px 0, so the dashed .lk-empty box started flush at the
    window edge. 12px keeps the dashed border clear of the wall while staying inside
    the 16px qi-col-header grid. */
 .qi-hub-runs .lk-empty {
   margin: 0 12px;
 }
+
 /* C404 — shell buttons (header tools, tab strip, rails, model menu) swapped
    background/color hard while the rest of the app eases 0.12s (.nav-item,
    rail tooltips); aligns the surfaces the cursor crosses most. */
@@ -12167,12 +13594,14 @@ ul.integ {
     background 0.12s,
     color 0.12s;
 }
+
 .hd-tool-cta {
   transition:
     background 0.12s,
     color 0.12s,
     border-color 0.12s;
 }
+
 /* C415 — .ws-fab keeps a hardcoded 50%-black drop shadow in light theme where the
    shadow tokens use 0.22/0.26 ink alpha; same geometry, theme-consistent density. */
 [data-theme="light"] .ws-fab {

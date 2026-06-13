@@ -230,10 +230,15 @@ describe("Workspace card connections", () => {
 
     const scene = container.querySelector(".ws-scene");
     expect(scene).not.toBeNull();
-    const style = (scene as HTMLElement).style;
-    expect(style.zoom).toBe("1.75");
-    expect(style.transform).toBe("translate(6.857142857142857px, 19.428571428571427px)");
-    expect(style.transform).not.toContain("scale(");
+    const sceneStyle = (scene as HTMLElement).style;
+    expect(sceneStyle.zoom).toBe("1.75");
+    expect(sceneStyle.transform).toBe("");
+
+    const pan = scene!.querySelector(".ws-scene-pan");
+    expect(pan).not.toBeNull();
+    const panStyle = (pan as HTMLElement).style;
+    expect(panStyle.transform).toBe("translate(6.857142857142857px, 19.428571428571427px)");
+    expect(panStyle.transform).not.toContain("scale(");
   });
 
   it("emits zoom 1 at the default view without a scale() transform (#305)", () => {
@@ -247,9 +252,14 @@ describe("Workspace card connections", () => {
 
     const scene = container.querySelector(".ws-scene");
     expect(scene).not.toBeNull();
-    const style = (scene as HTMLElement).style;
-    expect(style.zoom).toBe("1");
-    expect(style.transform).not.toContain("scale(");
+    const sceneStyle = (scene as HTMLElement).style;
+    expect(sceneStyle.zoom).toBe("1");
+    expect(sceneStyle.transform).toBe("");
+
+    const pan = scene!.querySelector(".ws-scene-pan");
+    expect(pan).not.toBeNull();
+    const panStyle = (pan as HTMLElement).style;
+    expect(panStyle.transform).not.toContain("scale(");
   });
 
   it("creates a preselected connector card when a Local Knowledge capsule is dropped", () => {
@@ -285,11 +295,11 @@ describe("Workspace card connections", () => {
       getData: vi.fn((type: string) =>
         type === LOCAL_KNOWLEDGE_CONNECTOR_DRAG_TYPE
           ? serializeLocalKnowledgeConnectorDrag({
-              kind: "capsule",
-              id: "cap-abc",
-              label: "First KC",
-              lifecycleState: "ready",
-            })
+            kind: "capsule",
+            id: "cap-abc",
+            label: "First KC",
+            lifecycleState: "ready",
+          })
           : "",
       ),
       dropEffect: "none",

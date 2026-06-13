@@ -216,11 +216,28 @@ export function Workspace({ ws, wsRef, openPalette, palette }: WorkspaceProps): 
   // worldPt -> workspaceLeft + view.x + worldPt * view.zoom.
   // Without this compensation, maximized windows at non-100% workspace zoom are
   // placed outside the workspace because worldVP math and rendered geometry diverge.
-  const sceneStyle: CSSProperties = useMemo(
+  // Zoom and pan are intentionally split across two nested elements.
+  // Putting both `zoom` and `will-change: transform` on the same element causes
+  // the browser to cache a GPU texture at the old resolution and then rescale it
+  // (bitmap interpolation) instead of re-rasterising at the new scale — making
+  // every tab and window look blurry after a workspace zoom.
+  //
+  // .ws-scene  — CSS `zoom` only, no `will-change`.  Forces a full layout pass
+  //              and re-rasterises all children at the new pixel scale.
+  // .ws-scene-pan — `transform: translate()` only, with `will-change: transform`
+  //                 (set in globals.css) so panning stays GPU-accelerated.
+  //
+  // CSS `zoom` shrinks/grows the *coordinate system* inside the element, so the
+  // translate values must be divided by view.zoom to keep world→viewport mapping
+  // correct (worldPt → workspaceLeft + view.x + worldPt * view.zoom).
+  const zoomStyle: CSSProperties = useMemo(
+    () => ({ zoom: view.zoom }),
+    [view.zoom],
+  );
+  const panStyle: CSSProperties = useMemo(
     () => ({
       transform: `translate(${String(view.x / view.zoom)}px, ${String(view.y / view.zoom)}px)`,
       transformOrigin: "0 0",
-      zoom: view.zoom,
     }),
     [view],
   );
@@ -340,18 +357,19 @@ export function Workspace({ ws, wsRef, openPalette, palette }: WorkspaceProps): 
         </div>
       ) : null}
 
-      <div className="ws-scene" style={sceneStyle}>
-        {snapPrev !== null ? (
-          <div
-            className="snap-ghost"
-            style={{ left: snapPrev.x, top: snapPrev.y, width: snapPrev.w, height: snapPrev.h }}
-          />
-        ) : null}
-        {visibleWins !== null ? (
-          <ConnectionsLayer wins={visibleWins} conns={conns} connecting={connecting} api={api} />
-        ) : null}
-        {visibleWins !== null
-          ? visibleWins.map((w) => (
+      <div className="ws-scene" style={zoomStyle}>
+        <div className="ws-scene-pan" style={panStyle}>
+          {snapPrev !== null ? (
+            <div
+              className="snap-ghost"
+              style={{ left: snapPrev.x, top: snapPrev.y, width: snapPrev.w, height: snapPrev.h }}
+            />
+          ) : null}
+          {visibleWins !== null ? (
+            <ConnectionsLayer wins={visibleWins} conns={conns} connecting={connecting} api={api} />
+          ) : null}
+          {visibleWins !== null
+            ? visibleWins.map((w) => (
               <WindowFrame
                 key={w.id}
                 win={w}
@@ -362,7 +380,8 @@ export function Workspace({ ws, wsRef, openPalette, palette }: WorkspaceProps): 
                 wsRef={wsRef}
               />
             ))
-          : null}
+            : null}
+        </div>
       </div>
 
       <div className="ws-zoom">
