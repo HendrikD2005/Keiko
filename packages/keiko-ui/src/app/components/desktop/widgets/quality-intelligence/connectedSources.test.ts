@@ -141,6 +141,17 @@ describe("buildConnectedRunSources — N+1 additive assembly (#729)", () => {
     const sources = buildConnectedRunSources({ connectedRoot: "/single" });
     expect(sources).toEqual([{ kind: "workspace", label: "single", path: "/single" }]);
   });
+
+  it("keeps a POSIX filesystem-root folder as '/', never collapsing it to an empty path", () => {
+    // Regression: trimTrailingSeparators("/") used to strip the root's only separator to "", so the
+    // server received path:"" and detectWorkspaceAt("") resolved to its OWN cwd — silently ingesting
+    // the wrong directory. The folder-source path never passes through resolveConnectedFilePath's
+    // separator guard, so the root must be preserved here. A non-empty, absolute path is required.
+    const sources = buildConnectedRunSources({ connectedRoot: "/" });
+    // toEqual pins path to "/" exactly — the pre-fix bug emitted path:"" (which the server's
+    // detectWorkspaceAt("") would resolve to its own cwd), so this fails if the root collapses.
+    expect(sources).toEqual([{ kind: "workspace", label: "/", path: "/" }]);
+  });
 });
 
 describe("resolveConnectedFilePath", () => {
@@ -159,5 +170,21 @@ describe("resolveConnectedFilePath", () => {
   it("returns null when there is no focused file", () => {
     expect(resolveConnectedFilePath("/root", null)).toBeNull();
     expect(resolveConnectedFilePath("/root", "   ")).toBeNull();
+  });
+
+  it("joins onto a Windows backslash root with a normalised single separator", () => {
+    expect(resolveConnectedFilePath("C:\\work", "docs\\spec.md")).toBe("C:/work/docs/spec.md");
+  });
+
+  it("does not double the separator when the root is a bare drive root (#714 AC3 — absolute AND correct)", () => {
+    // "C:\\" canonicalises to "C:/" (drive root keeps its slash); the join must not yield "C://docs".
+    expect(resolveConnectedFilePath("C:\\", "docs/spec.md")).toBe("C:/docs/spec.md");
+    expect(resolveConnectedFilePath("C:/", "docs/spec.md")).toBe("C:/docs/spec.md");
+  });
+
+  it("joins onto the POSIX filesystem root without a double separator", () => {
+    // trimTrailingSeparators("/") keeps the root as "/"; the separator guard then adds none, so the
+    // join stays a single-separator "/docs/spec.md" (absolute AND correctly formed — #714 AC3).
+    expect(resolveConnectedFilePath("/", "docs/spec.md")).toBe("/docs/spec.md");
   });
 });
