@@ -1,4 +1,4 @@
-name: User Finding
+name: User Finding (C)
 description: Report a bug or defect found while using Keiko.
 labels: ["User Findings", "bug", "status: new"]
 body:
