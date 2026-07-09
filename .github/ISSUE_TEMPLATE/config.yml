@@ -1,6 +1,1 @@
 blank_issues_enabled: false
-contact_links:
-  - name: Report User Findings
-    url: https://github.com/HendrikD2005/Keiko/issues/new/choose
-    about: Report a production or pilot bug with a structured template.
-
