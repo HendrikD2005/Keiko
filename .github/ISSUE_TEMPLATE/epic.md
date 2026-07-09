@@ -2,8 +2,9 @@
 name: Epic
 about: Plan a coordinated delivery wave with child issues
 title: 'Epic: '
-labels: ['type: epic', 'status: new']
+labels: 'status: new'
 assignees: ''
+
 ---
 
 ## Summary

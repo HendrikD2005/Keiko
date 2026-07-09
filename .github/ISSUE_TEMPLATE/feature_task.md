@@ -2,8 +2,9 @@
 name: Feature / Task
 about: Propose a new feature, implementation task, or chore
 title: ''
-labels: ['type: task', 'status: new']
+labels: 'status: new'
 assignees: ''
+
 ---
 
 Parent Epic: #<epic_number>
